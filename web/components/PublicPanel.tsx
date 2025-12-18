@@ -28,6 +28,29 @@ import {
 import { getProgram } from "@/lib/anchor";
 import { formatError } from "@/lib/formatError";
 
+type DecodedPosition = {
+  lockedAmount: bigint;
+  lockStartTs: number;
+  lockEndTs: number;
+  durationDays: number;
+};
+
+function decodeUserPositionAccount(data: Buffer): DecodedPosition {
+  // Anchor account layout: 8-byte discriminator + fields in struct order.
+  // See `programs/pocm_vault_mining/src/lib.rs` `UserPosition`.
+  if (data.length < 93) throw new Error(`Position account too small: ${data.length} bytes`);
+  let offset = 8; // discriminator
+  offset += 32; // owner pubkey
+  const lockedAmount = data.readBigUInt64LE(offset);
+  offset += 8;
+  const lockStartTs = Number(data.readBigInt64LE(offset));
+  offset += 8;
+  const lockEndTs = Number(data.readBigInt64LE(offset));
+  offset += 8;
+  const durationDays = data.readUInt16LE(offset);
+  return { lockedAmount, lockStartTs, lockEndTs, durationDays };
+}
+
 function parseAmountToBaseUnits(amount: string, decimals: number): bigint {
   const trimmed = amount.trim();
   if (!trimmed) throw new Error("Amount is required");
@@ -51,6 +74,7 @@ export function PublicPanel() {
   const [config, setConfig] = useState<Awaited<ReturnType<typeof fetchConfig>> | null>(null);
   const [nowTs, setNowTs] = useState<number | null>(null);
   const [positionExists, setPositionExists] = useState<boolean | null>(null);
+  const [position, setPosition] = useState<DecodedPosition | null>(null);
   const [mintBalance, setMintBalance] = useState<string | null>(null);
   const [depositAmount, setDepositAmount] = useState("2");
   const [durationDays, setDurationDays] = useState("14");
@@ -69,10 +93,20 @@ export function PublicPanel() {
       const pos = derivePositionPda(publicKey);
       const info = await connection.getAccountInfo(pos, "confirmed");
       setPositionExists(!!info);
+      if (info?.data) {
+        try {
+          setPosition(decodeUserPositionAccount(Buffer.from(info.data)));
+        } catch {
+          setPosition(null);
+        }
+      } else {
+        setPosition(null);
+      }
       const userMindAta = getAssociatedTokenAddressSync(cfg.mindMint, publicKey);
       setMintBalance(await fetchTokenBalanceUi(connection, userMindAta));
     } else {
       setPositionExists(null);
+      setPosition(null);
       setMintBalance(null);
     }
   }, [connection, publicKey]);
@@ -85,6 +119,8 @@ export function PublicPanel() {
     if (!config || nowTs == null) return null;
     return getCurrentEpochFrom(config, nowTs);
   }, [config, nowTs]);
+
+  const positionActive = !!position && position.lockedAmount > 0n;
 
   const ensureWallet = () => {
     if (!publicKey) throw new Error("Connect a wallet first");
@@ -184,6 +220,14 @@ export function PublicPanel() {
           })
           .instruction();
         tx.add(createPositionIx);
+      } else {
+        // Program forbids depositing again if the position is already active.
+        const decoded = decodeUserPositionAccount(Buffer.from(posInfo.data));
+        if (decoded.lockedAmount > 0n) {
+          throw new Error(
+            `Position already active (locked=${decoded.lockedAmount}). Wait until unlock, then use Withdraw (not in UI yet), or use a fresh wallet.`
+          );
+        }
       }
 
       tx.add(
@@ -359,6 +403,18 @@ export function PublicPanel() {
                 : "(connect wallet)"
             }
           />
+          <Field
+            label="Locked"
+            value={
+              publicKey
+                ? position
+                  ? position.lockedAmount > 0n
+                    ? `active (locked=${position.lockedAmount})`
+                    : "inactive"
+                  : "(unknown)"
+                : "(connect wallet)"
+            }
+          />
           <Field label="MIND balance" value={mintBalance ?? "(connect wallet)"} />
         </div>
       </Card>
@@ -383,7 +439,7 @@ export function PublicPanel() {
             </div>
             <Input value={depositAmount} onChange={setDepositAmount} placeholder="amount (XNT)" />
             <Button
-              disabled={!publicKey || busy !== null}
+              disabled={!publicKey || busy !== null || positionActive}
               onClick={() => void deposit()}
             >
               {busy === "deposit"
@@ -392,6 +448,11 @@ export function PublicPanel() {
                   ? "Deposit"
                   : "Create position + Deposit"}
             </Button>
+            {positionActive ? (
+              <div className="text-xs text-zinc-500">
+                Deposit is blocked because your position already has a lock. Use Heartbeat/Claim, then Withdraw after unlock (not in UI yet).
+              </div>
+            ) : null}
           </div>
 
           <div className="grid gap-2">
