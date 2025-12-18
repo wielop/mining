@@ -92,6 +92,27 @@ export function PublicPanel() {
     if (!signTransaction) throw new Error("Wallet does not support signTransaction");
   };
 
+  const signAndSend = async (tx: Transaction) => {
+    ensureWallet();
+    tx.feePayer = publicKey!;
+    const latest = await connection.getLatestBlockhash("confirmed");
+    tx.recentBlockhash = latest.blockhash;
+    const signed = await signTransaction!(tx);
+    const sig = await connection.sendRawTransaction(signed.serialize(), {
+      skipPreflight: false,
+      preflightCommitment: "confirmed",
+    });
+    await connection.confirmTransaction(
+      {
+        signature: sig,
+        blockhash: latest.blockhash,
+        lastValidBlockHeight: latest.lastValidBlockHeight,
+      },
+      "confirmed"
+    );
+    return sig;
+  };
+
   const createPosition = async () => {
     ensureWallet();
     if (!config) throw new Error("Config not loaded");
@@ -195,8 +216,7 @@ export function PublicPanel() {
         .instruction();
       tx.add(depositIx);
 
-      const sig = await sendTransaction(tx, connection);
-      await connection.confirmTransaction(sig, "confirmed");
+      const sig = await signAndSend(tx);
       setLastSig(sig);
       await refresh();
     } catch (e: any) {
