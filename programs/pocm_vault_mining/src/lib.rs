@@ -8,6 +8,7 @@ declare_id!("4BwetFdBHSkDTAByraaXiiwLFTQ5jj8w4mHGpYMrNn4r");
 const CONFIG_SEED: &[u8] = b"config";
 const VAULT_SEED: &[u8] = b"vault";
 const POSITION_SEED: &[u8] = b"position";
+const PROFILE_SEED: &[u8] = b"profile";
 const EPOCH_SEED: &[u8] = b"epoch";
 const USER_EPOCH_SEED: &[u8] = b"user_epoch";
 const BPS_DENOMINATOR: u128 = 10_000;
@@ -96,9 +97,28 @@ pub mod pocm_vault_mining {
         Ok(())
     }
 
-    pub fn create_position(ctx: Context<CreatePosition>, duration_days: u16) -> Result<()> {
+    pub fn create_position(
+        ctx: Context<CreatePosition>,
+        duration_days: u16,
+        position_index: u64,
+    ) -> Result<()> {
         let time_multiplier_bps =
             time_multiplier_for_duration(duration_days).ok_or(ErrorCode::InvalidDuration)?;
+
+        if ctx.accounts.user_profile.owner == Pubkey::default() {
+            ctx.accounts.user_profile.owner = ctx.accounts.owner.key();
+            ctx.accounts.user_profile.next_position_index = 0;
+            ctx.accounts.user_profile.bump = ctx.bumps.user_profile;
+        }
+        require_keys_eq!(
+            ctx.accounts.user_profile.owner,
+            ctx.accounts.owner.key(),
+            ErrorCode::Unauthorized
+        );
+        require!(
+            position_index == ctx.accounts.user_profile.next_position_index,
+            ErrorCode::InvalidPositionIndex
+        );
 
         let position = &mut ctx.accounts.position;
         position.owner = ctx.accounts.owner.key();
@@ -111,6 +131,13 @@ pub mod pocm_vault_mining {
         position.accrued_owed = 0;
         position.last_claimed_epoch = 0;
         position.bump = ctx.bumps.position;
+
+        ctx.accounts.user_profile.next_position_index = ctx
+            .accounts
+            .user_profile
+            .next_position_index
+            .checked_add(1)
+            .ok_or(ErrorCode::MathOverflow)?;
 
         emit!(PositionCreated {
             owner: position.owner,
@@ -129,27 +156,22 @@ pub mod pocm_vault_mining {
             ErrorCode::Unauthorized
         );
         // Non-refundable mining fee model:
-        // - only one active mining cycle per wallet at a time
-        // - user can "renew" after the cycle ends (lock_end_ts passed)
-        let now = Clock::get()?.unix_timestamp;
-        if position.locked_amount != 0 {
-            require!(now >= position.lock_end_ts, ErrorCode::PositionActive);
-            // Cycle ended; reset and allow a new deposit.
-            position.locked_amount = 0;
-            position.lock_start_ts = 0;
-            position.lock_end_ts = 0;
-            position.last_active_epoch = 0;
-        }
+        // - each position can be funded once
+        // - user may create multiple positions concurrently
+        require!(position.locked_amount == 0, ErrorCode::PositionActive);
         require!(
             time_multiplier_for_duration(position.duration_days).is_some(),
             ErrorCode::InvalidDuration
         );
         let cfg = &ctx.accounts.config;
+        let expected_fee = fee_for_duration(position.duration_days, cfg.xnt_decimals)?;
+        require!(amount == expected_fee, ErrorCode::InvalidFeeAmount);
         let lock_day_seconds = if cfg.allow_epoch_seconds_edit {
             cfg.epoch_seconds as i64
         } else {
             SECONDS_PER_DAY
         };
+        let now = Clock::get()?.unix_timestamp;
         let lock_duration = (position.duration_days as i64)
             .checked_mul(lock_day_seconds)
             .ok_or(ErrorCode::MathOverflow)?;
@@ -180,17 +202,12 @@ pub mod pocm_vault_mining {
         Ok(())
     }
 
-    pub fn heartbeat(ctx: Context<Heartbeat>, epoch_index: u64) -> Result<()> {
+    pub fn heartbeat<'info>(
+        ctx: Context<'_, '_, 'info, 'info, Heartbeat<'info>>,
+        epoch_index: u64,
+    ) -> Result<()> {
         let config = &mut ctx.accounts.config;
-        let position = &mut ctx.accounts.position;
-        require_keys_eq!(
-            position.owner,
-            ctx.accounts.owner.key(),
-            ErrorCode::Unauthorized
-        );
-        require!(position.locked_amount > 0, ErrorCode::InactivePosition);
         let now = Clock::get()?.unix_timestamp;
-        require!(now < position.lock_end_ts, ErrorCode::LockExpired);
 
         let expected_epoch = epoch_index_for_ts(config, now)?;
         require!(epoch_index == expected_epoch, ErrorCode::InvalidEpochIndex);
@@ -220,33 +237,49 @@ pub mod pocm_vault_mining {
             );
         }
 
-        let weighted_amount =
-            compute_weighted_amount(position.locked_amount, config.th1, config.th2);
-        let user_mp = weighted_amount
-            .checked_mul(position.time_multiplier_bps as u128)
-            .ok_or(ErrorCode::MathOverflow)?
-            .checked_div(BPS_DENOMINATOR)
-            .ok_or(ErrorCode::MathOverflow)?;
-        require!(user_mp > 0, ErrorCode::ZeroMiningPower);
+        let mut total_user_mp: u128 = 0;
+        for acc_info in ctx.remaining_accounts.iter() {
+            if acc_info.owner != &crate::ID {
+                continue;
+            }
+            let pos: Account<UserPosition> = Account::try_from(acc_info)?;
+            if pos.owner != ctx.accounts.owner.key() {
+                continue;
+            }
+            if pos.locked_amount == 0 {
+                continue;
+            }
+            if now >= pos.lock_end_ts {
+                continue;
+            }
+            let weighted_amount = compute_weighted_amount(pos.locked_amount, config.th1, config.th2);
+            let user_mp = weighted_amount
+                .checked_mul(pos.time_multiplier_bps as u128)
+                .ok_or(ErrorCode::MathOverflow)?
+                .checked_div(BPS_DENOMINATOR)
+                .ok_or(ErrorCode::MathOverflow)?;
+            total_user_mp = total_user_mp
+                .checked_add(user_mp)
+                .ok_or(ErrorCode::MathOverflow)?;
+        }
+        require!(total_user_mp > 0, ErrorCode::ZeroMiningPower);
 
         epoch_state.total_effective_mp = epoch_state
             .total_effective_mp
-            .checked_add(user_mp)
+            .checked_add(total_user_mp)
             .ok_or(ErrorCode::MathOverflow)?;
 
         let user_epoch = &mut ctx.accounts.user_epoch;
-        user_epoch.owner = position.owner;
+        user_epoch.owner = ctx.accounts.owner.key();
         user_epoch.epoch_index = epoch_index;
-        user_epoch.user_mp = user_mp;
+        user_epoch.user_mp = total_user_mp;
         user_epoch.claimed = false;
         user_epoch.bump = ctx.bumps.user_epoch;
 
-        position.last_active_epoch = epoch_index;
-
         emit!(HeartbeatEvent {
-            owner: position.owner,
+            owner: ctx.accounts.owner.key(),
             epoch_index,
-            user_mp,
+            user_mp: total_user_mp,
         });
         Ok(())
     }
@@ -255,13 +288,11 @@ pub mod pocm_vault_mining {
         let config = &mut ctx.accounts.config;
         let epoch_state = &ctx.accounts.epoch_state;
         let user_epoch = &mut ctx.accounts.user_epoch;
-        let position = &mut ctx.accounts.position;
         require_keys_eq!(
-            position.owner,
+            user_epoch.owner,
             ctx.accounts.owner.key(),
             ErrorCode::Unauthorized
         );
-        require_keys_eq!(user_epoch.owner, position.owner, ErrorCode::Unauthorized);
         require!(!user_epoch.claimed, ErrorCode::AlreadyClaimed);
         require!(epoch_state.total_effective_mp > 0, ErrorCode::NoEpochPower);
 
@@ -306,10 +337,9 @@ pub mod pocm_vault_mining {
             .mined_total
             .checked_add(reward_u64)
             .ok_or(ErrorCode::MathOverflow)?;
-        position.last_claimed_epoch = epoch_state.epoch_index;
 
         emit!(Claimed {
-            owner: position.owner,
+            owner: ctx.accounts.owner.key(),
             epoch_index: epoch_state.epoch_index,
             reward: reward_u64,
             capped_user_mp,
@@ -319,29 +349,16 @@ pub mod pocm_vault_mining {
     }
 
     pub fn withdraw(ctx: Context<Withdraw>) -> Result<()> {
-        let position = &mut ctx.accounts.position;
-        require_keys_eq!(
-            position.owner,
-            ctx.accounts.owner.key(),
-            ErrorCode::Unauthorized
-        );
+        let position = &ctx.accounts.position;
+        require_keys_eq!(position.owner, ctx.accounts.owner.key(), ErrorCode::Unauthorized);
         require!(position.locked_amount > 0, ErrorCode::InactivePosition);
-
         let now = Clock::get()?.unix_timestamp;
         require!(now >= position.lock_end_ts, ErrorCode::LockNotFinished);
 
-        // Non-refundable mining fee model: XNT stays in the treasury.
-        // This instruction only "finalizes" the cycle by resetting the position.
-        let amount = position.locked_amount;
-
-        position.locked_amount = 0;
-        position.lock_start_ts = 0;
-        position.lock_end_ts = 0;
-        position.last_active_epoch = 0;
-
+        // Custodial mining: no XNT is returned; this only closes the position account (rent reclaim).
         emit!(Withdrawn {
             owner: position.owner,
-            amount,
+            amount: position.locked_amount,
         });
         Ok(())
     }
@@ -447,6 +464,7 @@ pub struct InitializeParams {
 }
 
 #[derive(Accounts)]
+#[instruction(duration_days: u16, position_index: u64)]
 pub struct CreatePosition<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
@@ -456,10 +474,18 @@ pub struct CreatePosition<'info> {
     )]
     pub config: Account<'info, Config>,
     #[account(
+        init_if_needed,
+        payer = owner,
+        space = 8 + UserProfile::INIT_SPACE,
+        seeds = [PROFILE_SEED, owner.key().as_ref()],
+        bump
+    )]
+    pub user_profile: Account<'info, UserProfile>,
+    #[account(
         init,
         payer = owner,
         space = 8 + UserPosition::INIT_SPACE,
-        seeds = [POSITION_SEED, owner.key().as_ref()],
+        seeds = [POSITION_SEED, owner.key().as_ref(), position_index.to_le_bytes().as_ref()],
         bump
     )]
     pub position: Account<'info, UserPosition>,
@@ -476,8 +502,7 @@ pub struct Deposit<'info> {
     pub config: Account<'info, Config>,
     #[account(
         mut,
-        seeds = [POSITION_SEED, owner.key().as_ref()],
-        bump = position.bump
+        constraint = position.owner == owner.key()
     )]
     pub position: Account<'info, UserPosition>,
     #[account(seeds = [VAULT_SEED], bump = config.bumps.vault_authority)]
@@ -512,12 +537,6 @@ pub struct Heartbeat<'info> {
         bump = config.bumps.config
     )]
     pub config: Account<'info, Config>,
-    #[account(
-        mut,
-        seeds = [POSITION_SEED, owner.key().as_ref()],
-        bump = position.bump
-    )]
-    pub position: Account<'info, UserPosition>,
     #[account(
         init_if_needed,
         payer = owner,
@@ -555,13 +574,6 @@ pub struct Claim<'info> {
     pub vault_authority: UncheckedAccount<'info>,
     #[account(
         mut,
-        seeds = [POSITION_SEED, owner.key().as_ref()],
-        bump = position.bump,
-        constraint = position.owner == owner.key()
-    )]
-    pub position: Account<'info, UserPosition>,
-    #[account(
-        mut,
         seeds = [EPOCH_SEED, epoch_state.epoch_index.to_le_bytes().as_ref()],
         bump = epoch_state.bump,
         constraint = epoch_state.epoch_index == user_epoch.epoch_index
@@ -593,40 +605,11 @@ pub struct Withdraw<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
     #[account(
-        seeds = [CONFIG_SEED],
-        bump = config.bumps.config
-    )]
-    pub config: Account<'info, Config>,
-    #[account(
         mut,
-        seeds = [POSITION_SEED, owner.key().as_ref()],
-        bump = position.bump
+        close = owner,
+        constraint = position.owner == owner.key()
     )]
     pub position: Account<'info, UserPosition>,
-    #[account(
-        seeds = [VAULT_SEED],
-        bump = config.bumps.vault_authority
-    )]
-    /// CHECK: PDA authority
-    pub vault_authority: UncheckedAccount<'info>,
-    #[account(mut, constraint = xnt_mint.key() == config.xnt_mint)]
-    pub xnt_mint: Account<'info, Mint>,
-    #[account(
-        mut,
-        constraint = vault_xnt_ata.key() == config.vault_xnt_ata,
-        constraint = vault_xnt_ata.owner == vault_authority.key(),
-        constraint = vault_xnt_ata.mint == xnt_mint.key()
-    )]
-    pub vault_xnt_ata: Account<'info, TokenAccount>,
-    #[account(
-        init_if_needed,
-        payer = owner,
-        associated_token::mint = xnt_mint,
-        associated_token::authority = owner
-    )]
-    pub owner_xnt_ata: Account<'info, TokenAccount>,
-    pub token_program: Program<'info, Token>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 
@@ -718,6 +701,14 @@ pub struct Config {
 pub struct ConfigBumps {
     pub config: u8,
     pub vault_authority: u8,
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct UserProfile {
+    pub owner: Pubkey,
+    pub next_position_index: u64,
+    pub bump: u8,
 }
 
 #[account]
@@ -908,6 +899,21 @@ fn ten_pow(decimals: u8) -> Result<u64> {
     )
 }
 
+fn fee_for_duration(duration_days: u16, xnt_decimals: u8) -> Result<u64> {
+    let base = ten_pow(xnt_decimals)?;
+    match duration_days {
+        7 => {
+            require!(xnt_decimals > 0, ErrorCode::InvalidAmount);
+            Ok(base / 10) // 0.1 XNT
+        }
+        14 => Ok(base), // 1 XNT
+        30 => base
+            .checked_mul(5)
+            .ok_or_else(|| ErrorCode::MathOverflow.into()), // 5 XNT
+        _ => err!(ErrorCode::InvalidDuration),
+    }
+}
+
 #[error_code]
 pub enum ErrorCode {
     #[msg("Invalid mining duration")]
@@ -954,4 +960,8 @@ pub enum ErrorCode {
     EpochEditDisabled,
     #[msg("Provided decimals do not match the XNT mint")]
     DecimalsMismatch,
+    #[msg("Invalid position index")]
+    InvalidPositionIndex,
+    #[msg("Invalid fee amount for selected duration")]
+    InvalidFeeAmount,
 }

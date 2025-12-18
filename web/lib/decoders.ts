@@ -22,6 +22,11 @@ export type DecodedUserEpoch = {
   claimed: boolean;
 };
 
+export type DecodedUserProfile = {
+  owner: Uint8Array;
+  nextPositionIndex: bigint;
+};
+
 function assertMinLen(data: Buffer, min: number, label: string) {
   if (data.length < min) throw new Error(`${label} too small: ${data.length} bytes`);
 }
@@ -83,3 +88,12 @@ export function decodeUserEpochAccount(data: Buffer): DecodedUserEpoch {
   return { owner, epochIndex, userMp, claimed };
 }
 
+export function decodeUserProfileAccount(data: Buffer): DecodedUserProfile {
+  // discriminator (8) + owner(32) + next_position_index(u64) + bump(u8)
+  assertMinLen(data, 8 + 32 + 8 + 1, "UserProfile");
+  let offset = 8;
+  const owner = data.subarray(offset, offset + 32);
+  offset += 32;
+  const nextPositionIndex = data.readBigUInt64LE(offset);
+  return { owner, nextPositionIndex };
+}

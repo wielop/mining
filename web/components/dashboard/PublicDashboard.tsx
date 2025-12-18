@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAnchorWallet, useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { BN } from "@coral-xyz/anchor";
-import { SystemProgram, Transaction } from "@solana/web3.js";
+import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   NATIVE_MINT,
@@ -17,7 +17,6 @@ import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NetworkBadge } from "@/components/shared/NetworkBadge";
 import { CopyButton } from "@/components/shared/CopyButton";
@@ -27,21 +26,29 @@ import {
   PROGRAM_ID,
   deriveConfigPda,
   deriveEpochPda,
-  derivePositionPda,
   deriveUserEpochPda,
+  deriveUserProfilePda,
+  derivePositionPdaV2,
   deriveVaultPda,
   fetchClockUnixTs,
   fetchConfig,
   fetchTokenBalanceUi,
   getCurrentEpochFrom,
 } from "@/lib/solana";
-import { decodeEpochStateAccount, decodeUserEpochAccount, decodeUserPositionAccount } from "@/lib/decoders";
-import { explorerTxUrl, formatDurationSeconds, formatTokenAmount, formatUnixTs, parseUiAmountToBase, shortPk } from "@/lib/format";
+import { decodeEpochStateAccount, decodeUserEpochAccount, decodeUserPositionAccount, decodeUserProfileAccount } from "@/lib/decoders";
+import { explorerTxUrl, formatDurationSeconds, formatTokenAmount, formatUnixTs, shortPk } from "@/lib/format";
 import { formatError } from "@/lib/formatError";
 
 function safeBigintToNumber(value: bigint): number {
   if (value > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("Amount is too large");
   return Number(value);
+}
+
+function planFeeBase(durationDays: 7 | 14 | 30, decimals: number): bigint {
+  const base = 10n ** BigInt(decimals);
+  if (durationDays === 7) return base / 10n; // 0.1
+  if (durationDays === 14) return base; // 1
+  return base * 5n; // 5
 }
 
 function computeEstimatedReward(args: {
@@ -70,7 +77,9 @@ export function PublicDashboard() {
 
   const [config, setConfig] = useState<Awaited<ReturnType<typeof fetchConfig>> | null>(null);
   const [nowTs, setNowTs] = useState<number | null>(null);
-  const [positionInfo, setPositionInfo] = useState<ReturnType<typeof decodeUserPositionAccount> | null>(null);
+  const [positions, setPositions] = useState<
+    Array<{ pubkey: string; data: ReturnType<typeof decodeUserPositionAccount> }>
+  >([]);
   const [xntBalanceUi, setXntBalanceUi] = useState<string | null>(null);
   const [mindBalanceUi, setMindBalanceUi] = useState<string | null>(null);
 
@@ -78,8 +87,7 @@ export function PublicDashboard() {
   const [userEpoch, setUserEpoch] = useState<ReturnType<typeof decodeUserEpochAccount> | null>(null);
 
   const [durationDays, setDurationDays] = useState<7 | 14 | 30>(14);
-  const [depositAmountUi, setDepositAmountUi] = useState("2");
-  const [busy, setBusy] = useState<null | "deposit" | "heartbeat" | "claim" | "create">(null);
+  const [busy, setBusy] = useState<null | "buy" | "heartbeat" | "claim" | "close">(null);
   const [lastSig, setLastSig] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,13 +101,12 @@ export function PublicDashboard() {
     return nowTs < config.emissionStartTs.toNumber();
   }, [config, nowTs]);
 
-  const positionPda = useMemo(() => (publicKey ? derivePositionPda(publicKey) : null), [publicKey]);
-  const positionExists = !!positionPda && positionInfo !== null;
-  const positionHasAmount = !!positionInfo && positionInfo.lockedAmount > 0n;
-  const positionActive =
-    !!positionInfo && positionInfo.lockedAmount > 0n && nowTs != null && nowTs < positionInfo.lockEndTs;
-  const positionEnded =
-    !!positionInfo && positionInfo.lockedAmount > 0n && nowTs != null && nowTs >= positionInfo.lockEndTs;
+  const activePositions = useMemo(() => {
+    if (nowTs == null) return [];
+    return positions.filter((p) => p.data.lockedAmount > 0n && nowTs < p.data.lockEndTs);
+  }, [positions, nowTs]);
+
+  const anyActive = activePositions.length > 0;
 
   const heartbeatDone = useMemo(() => {
     if (!userEpoch || currentEpoch == null) return false;
@@ -116,7 +123,7 @@ export function PublicDashboard() {
     setNowTs(ts);
 
     if (!publicKey) {
-      setPositionInfo(null);
+      setPositions([]);
       setXntBalanceUi(null);
       setMindBalanceUi(null);
       setEpochState(null);
@@ -124,9 +131,22 @@ export function PublicDashboard() {
       return;
     }
 
-    const pos = derivePositionPda(publicKey);
-    const posAcc = await connection.getAccountInfo(pos, "confirmed");
-    setPositionInfo(posAcc?.data ? decodeUserPositionAccount(Buffer.from(posAcc.data)) : null);
+    // List all positions for this owner via getProgramAccounts (no backend).
+    // Filters: owner pubkey at offset 8 (after discriminator) + fixed account size (UserPosition).
+    const gpa = await connection.getProgramAccounts(PROGRAM_ID, {
+      commitment: "confirmed",
+      filters: [
+        { dataSize: 93 },
+        { memcmp: { offset: 8, bytes: publicKey.toBase58() } },
+      ],
+    });
+    const decoded = gpa
+      .map((a) => ({
+        pubkey: a.pubkey.toBase58(),
+        data: decodeUserPositionAccount(Buffer.from(a.account.data)),
+      }))
+      .sort((a, b) => b.data.lockStartTs - a.data.lockStartTs);
+    setPositions(decoded);
 
     const xntMint = cfg.xntMint;
     if (xntMint.equals(NATIVE_MINT)) {
@@ -140,7 +160,7 @@ export function PublicDashboard() {
     const userMindAta = getAssociatedTokenAddressSync(cfg.mindMint, publicKey);
     setMindBalanceUi(await fetchTokenBalanceUi(connection, userMindAta));
 
-    const epoch = currentEpoch ?? getCurrentEpochFrom(cfg, ts);
+    const epoch = getCurrentEpochFrom(cfg, ts);
     const epochStatePda = deriveEpochPda(epoch);
     const userEpochPda = deriveUserEpochPda(publicKey, epoch);
     const [epochAcc, userAcc] = await Promise.all([
@@ -217,38 +237,23 @@ export function PublicDashboard() {
     if (busy) return;
     if (emissionNotStarted) throw new Error(`Mining not started yet (start=${config.emissionStartTs.toNumber()})`);
 
+    const feeBase = planFeeBase(durationDays, config.xntDecimals);
     const xntMint = config.xntMint;
-    const amountBase = parseUiAmountToBase(depositAmountUi, config.xntDecimals);
-    if (amountBase <= 0n) throw new Error("Amount must be > 0");
 
-    if (positionActive) throw new Error("Position already active");
-
-    setBusy("deposit");
+    setBusy("buy");
     try {
-      await withTx(positionExists ? (positionEnded ? "Renew mining cycle" : "Deposit") : "Create position + Deposit", async () => {
+      await withTx("Buy mining position", async () => {
         const program = getProgram(connection, anchorWallet);
         const tx = new Transaction();
 
-        const position = derivePositionPda(publicKey);
-        const posAcc = await connection.getAccountInfo(position, "confirmed");
-        if (!posAcc) {
-          const createIx = await program.methods
-            .createPosition(durationDays)
-            .accounts({
-              owner: publicKey,
-              config: deriveConfigPda(),
-              position,
-              systemProgram: SystemProgram.programId,
-            })
-            .instruction();
-          tx.add(createIx);
-        } else {
-          const decoded = decodeUserPositionAccount(Buffer.from(posAcc.data));
-          if (decoded.lockedAmount > 0n) {
-            if (nowTs == null) throw new Error("Clock not loaded");
-            if (nowTs < decoded.lockEndTs) throw new Error("PositionActive");
-          }
-        }
+        // Determine next position index from UserProfile PDA (or 0 if missing).
+        const profilePda = deriveUserProfilePda(publicKey);
+        const profileAcc = await connection.getAccountInfo(profilePda, "confirmed");
+        const nextIndex = profileAcc?.data
+          ? decodeUserProfileAccount(Buffer.from(profileAcc.data)).nextPositionIndex
+          : 0n;
+
+        const positionPda = derivePositionPdaV2(publicKey, nextIndex);
 
         const ownerXntAta = getAssociatedTokenAddressSync(xntMint, publicKey);
         const vaultAuthority = deriveVaultPda();
@@ -270,18 +275,30 @@ export function PublicDashboard() {
             SystemProgram.transfer({
               fromPubkey: publicKey,
               toPubkey: ownerXntAta,
-              lamports: safeBigintToNumber(amountBase),
+              lamports: safeBigintToNumber(feeBase),
             }),
             createSyncNativeInstruction(ownerXntAta)
           );
         }
 
-        const depositIx = await program.methods
-          .deposit(new BN(amountBase.toString()))
+        const createIx = await program.methods
+          .createPosition(durationDays, new BN(nextIndex.toString()))
           .accounts({
             owner: publicKey,
             config: deriveConfigPda(),
-            position,
+            userProfile: profilePda,
+            position: positionPda,
+            systemProgram: SystemProgram.programId,
+          })
+          .instruction();
+        tx.add(createIx);
+
+        const depositIx = await program.methods
+          .deposit(new BN(feeBase.toString()))
+          .accounts({
+            owner: publicKey,
+            config: deriveConfigPda(),
+            position: positionPda,
             vaultAuthority,
             xntMint,
             vaultXntAta,
@@ -303,7 +320,7 @@ export function PublicDashboard() {
     if (!anchorWallet) throw new Error("Wallet is not ready for Anchor");
     if (!config) throw new Error("Config not loaded");
     if (busy) return;
-    if (!positionActive) throw new Error("Deposit first");
+    if (!anyActive) throw new Error("Deposit first");
     const epoch = currentEpoch;
     if (epoch == null) throw new Error("Epoch not available");
     if (heartbeatDone) throw new Error("Heartbeat already recorded for this epoch");
@@ -312,7 +329,6 @@ export function PublicDashboard() {
     try {
       await withTx("Heartbeat", async () => {
         const program = getProgram(connection, anchorWallet);
-        const position = derivePositionPda(publicKey);
         const epochStatePda = deriveEpochPda(epoch);
         const userEpochPda = deriveUserEpochPda(publicKey, epoch);
         const ix = await program.methods
@@ -320,11 +336,17 @@ export function PublicDashboard() {
           .accounts({
             owner: publicKey,
             config: deriveConfigPda(),
-            position,
             epochState: epochStatePda,
             userEpoch: userEpochPda,
             systemProgram: SystemProgram.programId,
           })
+          .remainingAccounts(
+            activePositions.map((p) => ({
+              pubkey: new PublicKey(p.pubkey),
+              isSigner: false,
+              isWritable: false,
+            }))
+          )
           .instruction();
         const tx = new Transaction().add(ix);
         return await signAndSend(tx);
@@ -339,7 +361,7 @@ export function PublicDashboard() {
     if (!anchorWallet) throw new Error("Wallet is not ready for Anchor");
     if (!config) throw new Error("Config not loaded");
     if (busy) return;
-    if (!positionActive) throw new Error("Deposit first");
+    if (!anyActive) throw new Error("Deposit first");
     if (!heartbeatDone) throw new Error("Heartbeat required");
     if (claimed) throw new Error("Already claimed for this epoch");
     const epoch = currentEpoch;
@@ -359,7 +381,6 @@ export function PublicDashboard() {
             owner: publicKey,
             config: deriveConfigPda(),
             vaultAuthority,
-            position: derivePositionPda(publicKey),
             epochState: epochStatePda,
             userEpoch: userEpochPda,
             mindMint: config.mindMint,
@@ -377,48 +398,29 @@ export function PublicDashboard() {
     }
   };
 
-  const maxDeposit = async () => {
-    if (!publicKey || !config) return;
+  const onClosePosition = async (positionPubkey: string) => {
+    if (!publicKey) throw new Error("Connect a wallet first");
+    if (!anchorWallet) throw new Error("Wallet is not ready for Anchor");
+    if (busy) return;
+
+    setBusy("close");
     try {
-      if (config.xntMint.equals(NATIVE_MINT)) {
-        const lamports = await connection.getBalance(publicKey, "confirmed");
-        const reserve = 10_000_000n; // 0.01 SOL reserve
-        const max = BigInt(lamports) > reserve ? BigInt(lamports) - reserve : 0n;
-        setDepositAmountUi(formatTokenAmount(max, 9, 6));
-      } else {
-        const ownerXntAta = getAssociatedTokenAddressSync(config.xntMint, publicKey);
-        const bal = await connection.getTokenAccountBalance(ownerXntAta, "confirmed").catch(() => null);
-        const amount = bal?.value.amount ? BigInt(bal.value.amount) : 0n;
-        setDepositAmountUi(formatTokenAmount(amount, config.xntDecimals, 6));
-      }
-    } catch {
-      // ignore
+      await withTx("Close position", async () => {
+        const program = getProgram(connection, anchorWallet);
+        const ix = await program.methods
+          .withdraw()
+          .accounts({
+            owner: publicKey,
+            position: new PublicKey(positionPubkey),
+            systemProgram: SystemProgram.programId,
+          })
+          .instruction();
+        return await signAndSend(new Transaction().add(ix));
+      });
+    } finally {
+      setBusy(null);
     }
   };
-
-  const estimatedLockEndTs = useMemo(() => {
-    if (!config || nowTs == null) return null;
-    const daySeconds = config.allowEpochSecondsEdit ? config.epochSeconds.toNumber() : 86_400;
-    return nowTs + durationDays * daySeconds;
-  }, [config, nowTs, durationDays]);
-
-  const countdownSeconds = useMemo(() => {
-    if (!positionInfo || nowTs == null || positionInfo.lockedAmount === 0n) return null;
-    return Math.max(0, positionInfo.lockEndTs - nowTs);
-  }, [positionInfo, nowTs]);
-
-  const lockProgress = useMemo(() => {
-    if (!positionInfo || nowTs == null || positionInfo.lockedAmount === 0n) return null;
-    const total = positionInfo.lockEndTs - positionInfo.lockStartTs;
-    if (total <= 0) return 0;
-    const done = nowTs - positionInfo.lockStartTs;
-    return Math.min(1, Math.max(0, done / total));
-  }, [positionInfo, nowTs]);
-
-  const lockProgressPct = useMemo(() => {
-    if (lockProgress == null) return 0;
-    return Math.round(lockProgress * 100);
-  }, [lockProgress]);
 
   const estimatedRewardBase = useMemo(() => {
     if (!config || !epochState || !userEpoch) return null;
@@ -518,19 +520,15 @@ export function PublicDashboard() {
                   <div className="mt-1 text-sm text-zinc-200">
                     {!publicKey ? (
                       <Badge variant="muted">not connected</Badge>
-                    ) : !positionExists ? (
+                    ) : positions.length === 0 ? (
                       <Badge variant="warning">no position</Badge>
-                    ) : positionActive ? (
-                      <Badge variant="success">active lock</Badge>
+                    ) : anyActive ? (
+                      <Badge variant="success">active miners</Badge>
                     ) : (
-                      <Badge variant="muted">inactive</Badge>
+                      <Badge variant="muted">no active miners</Badge>
                     )}
                   </div>
-                  {publicKey && positionPda ? (
-                    <div className="mt-2 text-xs text-zinc-500">
-                      PDA: <span className="font-mono">{shortPk(positionPda.toBase58(), 8)}</span>
-                    </div>
-                  ) : null}
+                  <div className="mt-2 text-xs text-zinc-500">Miners: {positions.length}</div>
                 </div>
               </div>
               {emissionNotStarted && config ? (
@@ -547,9 +545,9 @@ export function PublicDashboard() {
               <CardHeader
                 title="Position"
                 description={
-                  positionActive
-                    ? "Your lock is active. Heartbeat each epoch and claim rewards."
-                    : "Create a position (one-time duration) and deposit XNT to start."
+                  anyActive
+                    ? "You have active miners. Heartbeat each epoch and claim rewards."
+                    : "Buy miners any time. Each purchase creates a new position."
                 }
                 right={
                   config ? (
@@ -562,119 +560,46 @@ export function PublicDashboard() {
                 <div className="mt-4 text-sm text-zinc-400">Connect your wallet to view position controls.</div>
               ) : (
                 <div className="mt-4 grid gap-4">
-                  {!positionExists ? (
-                    <div className="grid gap-3">
-                      <div className="text-xs text-zinc-400">Duration (one-time per wallet)</div>
-                      <div className="grid grid-cols-3 gap-2">
-                        {([
-                          { d: 7, mult: "1.0x" },
-                          { d: 14, mult: "1.25x" },
-                          { d: 30, mult: "1.5x" },
-                        ] as const).map((opt) => (
-                          <button
-                            key={opt.d}
-                            type="button"
-                            onClick={() => setDurationDays(opt.d)}
-                            className={[
-                              "rounded-2xl border px-3 py-3 text-left transition",
-                              durationDays === opt.d
-                                ? "border-cyan-400/40 bg-cyan-500/10"
-                                : "border-white/10 bg-white/5 hover:bg-white/10",
-                            ].join(" ")}
-                          >
-                            <div className="text-sm font-semibold">{opt.d}d</div>
-                            <div className="mt-1 text-xs text-zinc-400">{opt.mult} multiplier</div>
-                          </button>
-                        ))}
-                      </div>
-                      <div className="rounded-xl border border-amber-500/20 bg-amber-950/20 p-3 text-xs text-amber-100">
-                        Deposit is non-refundable (treasury fee). Estimated cycle end:{" "}
-                        <span className="font-mono">{estimatedLockEndTs ? formatUnixTs(estimatedLockEndTs) : "-"}</span>
-                      </div>
+                  <div className="grid gap-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs text-zinc-400">XNT balance</div>
+                      <div className="font-mono text-xs text-zinc-300">{xntBalanceUi ?? "(loading)"}</div>
                     </div>
-                  ) : null}
-
-                  {positionHasAmount && positionInfo && config ? (
-                    <div className="grid gap-3">
-                      <div className="grid gap-2 rounded-2xl border border-white/10 bg-white/5 p-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <div className="text-xs text-zinc-400">Locked amount</div>
-                            <div className="mt-1 font-mono text-lg">
-                              {formatTokenAmount(positionInfo.lockedAmount, config.xntDecimals, 6)} XNT
-                            </div>
-                          </div>
-                          <Badge variant={positionActive ? "success" : "muted"}>
-                            {positionActive ? "active" : "ended"}
-                          </Badge>
-                        </div>
-                        <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-zinc-400">
-                          <div>
-                            Start: <span className="font-mono text-zinc-200">{formatUnixTs(positionInfo.lockStartTs)}</span>
-                          </div>
-                          <div>
-                            End: <span className="font-mono text-zinc-200">{formatUnixTs(positionInfo.lockEndTs)}</span>
-                          </div>
-                        </div>
-                        <div className="mt-2">
-                          <div className="h-2 w-full overflow-hidden rounded-full bg-white/5">
-                            <div
-                              className="h-full bg-gradient-to-r from-cyan-400/70 to-fuchsia-500/60"
-                              style={{ width: `${lockProgressPct}%` }}
-                            />
-                          </div>
-                          <div className="mt-2 flex items-center justify-between text-xs text-zinc-400">
-                            <span>Progress</span>
-                            <span className="font-mono">
-                              {countdownSeconds == null ? "-" : positionEnded ? "ended" : formatDurationSeconds(countdownSeconds)}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="mt-2 rounded-xl border border-amber-500/20 bg-amber-950/20 p-3 text-xs text-amber-100">
-                          XNT stays in the treasury. When the cycle ends, deposit again to start a new cycle.
-                        </div>
-                      </div>
+                    <div className="text-xs text-zinc-400">Choose a plan</div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {([
+                        { d: 7, mult: "1.0x", price: "0.1" },
+                        { d: 14, mult: "1.25x", price: "1" },
+                        { d: 30, mult: "1.5x", price: "5" },
+                      ] as const).map((opt) => (
+                        <button
+                          key={opt.d}
+                          type="button"
+                          onClick={() => setDurationDays(opt.d)}
+                          className={[
+                            "rounded-2xl border px-3 py-3 text-left transition",
+                            durationDays === opt.d
+                              ? "border-cyan-400/40 bg-cyan-500/10"
+                              : "border-white/10 bg-white/5 hover:bg-white/10",
+                          ].join(" ")}
+                        >
+                          <div className="text-sm font-semibold">{opt.d}d</div>
+                          <div className="mt-1 text-xs text-zinc-400">{opt.mult}</div>
+                          <div className="mt-2 text-xs text-zinc-200">{opt.price} XNT</div>
+                        </button>
+                      ))}
                     </div>
-                  ) : (
-                    <div className="grid gap-3">
-                      <div className="flex items-center justify-between">
-                        <div className="text-xs text-zinc-400">XNT balance</div>
-                        <div className="font-mono text-xs text-zinc-300">{xntBalanceUi ?? "(loading)"}</div>
-                      </div>
-                      <div className="rounded-xl border border-amber-500/20 bg-amber-950/20 p-3 text-xs text-amber-100">
-                        Deposit is non-refundable (treasury fee).
-                      </div>
-                      <Input
-                        value={depositAmountUi}
-                        onChange={setDepositAmountUi}
-                        placeholder="0.0"
-                        right={
-                          <Button variant="ghost" size="sm" onClick={() => void maxDeposit()} disabled={!config}>
-                            Max
-                          </Button>
-                        }
-                      />
-                      <Button
-                        size="lg"
-                        onClick={() => void onDeposit().catch(() => null)}
-                        disabled={!config || busy !== null || emissionNotStarted || positionActive}
-                        title={positionActive ? "Position already active" : undefined}
-                      >
-                        {busy === "deposit"
-                          ? "Submitting…"
-                          : positionExists
-                            ? positionEnded
-                              ? "Renew mining (deposit again)"
-                              : "Deposit"
-                            : "Create position + Deposit"}
-                      </Button>
-                      {positionActive ? (
-                        <div className="text-xs text-zinc-400">
-                          Deposit is blocked because your mining cycle is still active.
-                        </div>
-                      ) : null}
+                    <div className="rounded-xl border border-amber-500/20 bg-amber-950/20 p-3 text-xs text-amber-100">
+                      Deposit is non-refundable (treasury fee). You can buy multiple miners.
                     </div>
-                  )}
+                    <Button
+                      size="lg"
+                      onClick={() => void onDeposit().catch(() => null)}
+                      disabled={!config || busy !== null || emissionNotStarted}
+                    >
+                      {busy === "buy" ? "Submitting…" : "Buy miner"}
+                    </Button>
+                  </div>
                 </div>
               )}
             </Card>
@@ -687,9 +612,9 @@ export function PublicDashboard() {
               <CardHeader title="Epoch Actions" description="These actions are only relevant while your lock is active." />
               {!publicKey ? (
                 <div className="mt-4 text-sm text-zinc-400">Connect wallet to see epoch actions.</div>
-              ) : !positionActive ? (
+              ) : !anyActive ? (
                 <div className="mt-4 text-sm text-zinc-400">
-                  {positionEnded ? "Cycle ended. Renew to keep mining." : "Deposit to activate your mining cycle."}
+                  Buy a miner to participate in the current epoch.
                 </div>
               ) : (
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -750,26 +675,67 @@ export function PublicDashboard() {
 
           <div className="md:col-span-5">
             <Card>
-              <CardHeader
-                title="Treasury"
-                description="Your XNT deposit stays in the protocol treasury (custodial model)."
-              />
+              <CardHeader title="Your miners" description="Each purchase is a separate position." />
               {!publicKey ? (
-                <div className="mt-4 text-sm text-zinc-400">Connect wallet to see your cycle status.</div>
-              ) : !positionHasAmount ? (
-                <div className="mt-4 text-sm text-zinc-400">No deposit yet.</div>
+                <div className="mt-4 text-sm text-zinc-400">Connect wallet to see your miners.</div>
+              ) : positions.length === 0 ? (
+                <div className="mt-4 text-sm text-zinc-400">No miners yet.</div>
               ) : (
-                <div className="mt-4 grid gap-3">
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-zinc-400">
-                    {positionEnded
-                      ? "Cycle ended. Renew by depositing again."
-                      : countdownSeconds == null
-                        ? "Loading time remaining…"
-                        : `Cycle ends in ${formatDurationSeconds(countdownSeconds)}.`}
-                  </div>
-                  <div className="text-xs text-zinc-500">
-                    Funds are held by the program treasury and are not withdrawable by users.
-                  </div>
+                <div className="mt-4 grid gap-2">
+                  {positions.slice(0, 5).map((p) => {
+                    const active = nowTs != null && p.data.lockedAmount > 0n && nowTs < p.data.lockEndTs;
+                    const remaining = nowTs != null ? Math.max(0, p.data.lockEndTs - nowTs) : null;
+                    const ended = nowTs != null && p.data.lockedAmount > 0n && nowTs >= p.data.lockEndTs;
+                    const inactive = p.data.lockedAmount === 0n;
+                    return (
+                      <div key={p.pubkey} className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="text-xs text-zinc-400">Position</div>
+                            <div className="mt-1 font-mono text-xs text-zinc-200">{shortPk(p.pubkey, 8)}</div>
+                          </div>
+                          <Badge variant={active ? "success" : inactive ? "warning" : "muted"}>
+                            {active ? "active" : inactive ? "inactive" : ended ? "ended" : "inactive"}
+                          </Badge>
+                        </div>
+                        <div className="mt-2 text-xs text-zinc-400">
+                          paid:{" "}
+                          <span className="font-mono text-zinc-200">
+                            {config ? `${formatTokenAmount(p.data.lockedAmount, config.xntDecimals, 6)} XNT` : "-"}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-xs text-zinc-400">
+                          duration: <span className="font-mono text-zinc-200">{p.data.durationDays}d</span>
+                        </div>
+                        <div className="mt-1 text-xs text-zinc-400">
+                          ends: <span className="font-mono text-zinc-200">{formatUnixTs(p.data.lockEndTs)}</span>
+                        </div>
+                        {active ? (
+                          <div className="mt-2 text-xs text-zinc-400">
+                            remaining:{" "}
+                            <span className="font-mono text-zinc-200">
+                              {remaining == null ? "-" : formatDurationSeconds(remaining)}
+                            </span>
+                          </div>
+                        ) : ended ? (
+                          <div className="mt-3 flex items-center justify-between gap-3">
+                            <div className="text-xs text-zinc-500">Lock ended. Close to reclaim rent (history will disappear).</div>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              disabled={busy !== null}
+                              onClick={() => void onClosePosition(p.pubkey).catch(() => null)}
+                            >
+                              Close
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                  {positions.length > 5 ? (
+                    <div className="text-xs text-zinc-500">Showing 5 newest. (More can be added.)</div>
+                  ) : null}
                 </div>
               )}
             </Card>
@@ -809,11 +775,9 @@ export function PublicDashboard() {
           <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
             <div className="text-xs text-zinc-400">
               {publicKey
-                ? positionActive
+                ? anyActive
                   ? "Mining active"
-                  : positionEnded
-                    ? "Cycle ended"
-                    : "Ready to deposit"
+                  : "Ready to buy"
                 : "Connect wallet"}
             </div>
             <Button
@@ -822,17 +786,17 @@ export function PublicDashboard() {
                 busy !== null ||
                 !publicKey ||
                 emissionNotStarted ||
-                (positionActive && heartbeatDone && claimed)
+                (anyActive && heartbeatDone && claimed)
               }
               onClick={() => {
                 if (!publicKey) return;
-                if (!positionActive) void onDeposit();
+                if (!anyActive) void onDeposit();
                 else if (!heartbeatDone) void onHeartbeat();
                 else if (!claimed) void onClaim();
               }}
               title={!publicKey ? "Connect wallet" : undefined}
             >
-              {busy ? "Working…" : !positionActive ? (positionEnded ? "Renew" : "Deposit") : !heartbeatDone ? "Heartbeat" : !claimed ? "Claim" : "Up to date"}
+              {busy ? "Working…" : !anyActive ? "Buy" : !heartbeatDone ? "Heartbeat" : !claimed ? "Claim" : "Up to date"}
             </Button>
           </div>
         </div>

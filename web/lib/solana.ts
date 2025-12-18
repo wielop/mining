@@ -19,10 +19,20 @@ export const deriveVaultPda = () =>
   PublicKey.findProgramAddressSync([Buffer.from("vault")], PROGRAM_ID)[0];
 
 export const derivePositionPda = (owner: PublicKey) =>
+  PublicKey.findProgramAddressSync([Buffer.from("position"), owner.toBuffer()], PROGRAM_ID)[0];
+
+export const derivePositionPdaV2 = (owner: PublicKey, positionIndex: bigint | number) =>
   PublicKey.findProgramAddressSync(
-    [Buffer.from("position"), owner.toBuffer()],
+    [
+      Buffer.from("position"),
+      owner.toBuffer(),
+      new BN(positionIndex).toArrayLike(Buffer, "le", 8),
+    ],
     PROGRAM_ID
   )[0];
+
+export const deriveUserProfilePda = (owner: PublicKey) =>
+  PublicKey.findProgramAddressSync([Buffer.from("profile"), owner.toBuffer()], PROGRAM_ID)[0];
 
 export const deriveEpochPda = (epochIndex: number) =>
   PublicKey.findProgramAddressSync(
