@@ -440,8 +440,8 @@
         }
       ]
     },
-    {
-      "name": "deposit",
+        {
+          "name": "deposit",
       "discriminator": [
         242,
         35,
@@ -471,6 +471,30 @@
                   105,
                   103
                 ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_profile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
               }
             ]
           }
@@ -526,12 +550,440 @@
           "writable": true
         },
         {
+          "name": "staking_vault_xnt_ata",
+          "writable": true
+        },
+        {
           "name": "owner_xnt_ata",
           "writable": true
         },
         {
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+          ],
+          "args": [
+            {
+              "name": "amount",
+              "type": "u64"
+            }
+          ]
+        },
+    {
+      "name": "create_stake",
+      "discriminator": [
+        201,
+        134,
+        55,
+        171,
+        2,
+        136,
+        228,
+        226
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_profile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "staking_position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  107,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "arg",
+                "path": "position_index"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "staking_vault_mind_ata",
+          "writable": true
+        },
+        {
+          "name": "owner_mind_ata",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "duration_days",
+          "type": "u16"
+        },
+        {
+          "name": "position_index",
+          "type": "u64"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "claim_stake_reward",
+      "discriminator": [
+        59,
+        150,
+        115,
+        238,
+        36,
+        66,
+        156,
+        27
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "staking_position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  107,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "arg",
+                "path": "stake_index"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "staking_vault_xnt_ata",
+          "writable": true
+        },
+        {
+          "name": "owner_xnt_ata",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "stake_index",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "withdraw_stake",
+      "discriminator": [
+        153,
+        8,
+        22,
+        138,
+        105,
+        176,
+        87,
+        66
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "staking_position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  107,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "arg",
+                "path": "stake_index"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "staking_vault_mind_ata",
+          "writable": true
+        },
+        {
+          "name": "owner_mind_ata",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "stake_index",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "admin_fund_staking_xnt",
+      "discriminator": [
+        211,
+        145,
+        195,
+        99,
+        166,
+        15,
+        208,
+        233
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "relations": [
+            "admin"
+          ]
+        },
+        {
+          "name": "xnt_mint",
+          "writable": true
+        },
+        {
+          "name": "staking_vault_xnt_ata",
+          "writable": true
+        },
+        {
+          "name": "admin_xnt_ata",
+          "writable": true
+        },
+        {
+          "name": "vault_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
@@ -711,6 +1163,9 @@
           "name": "vault_xnt_ata"
         },
         {
+          "name": "staking_vault_xnt_ata"
+        },
+        {
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
@@ -721,6 +1176,9 @@
         {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "staking_vault_mind_ata"
         },
         {
           "name": "rent",
@@ -833,6 +1291,19 @@
         17,
         27
       ]
+    },
+    {
+      "name": "StakingPosition",
+      "discriminator": [
+        56,
+        11,
+        7,
+        133,
+        21,
+        9,
+        198,
+        109
+      ]
     }
   ],
   "events": [
@@ -925,6 +1396,46 @@
         124,
         219,
         13
+      ]
+    }
+    ,
+    {
+      "name": "Staked",
+      "discriminator": [
+        11,
+        146,
+        45,
+        205,
+        230,
+        58,
+        213,
+        240
+      ]
+    },
+    {
+      "name": "StakeRewardClaimed",
+      "discriminator": [
+        181,
+        56,
+        36,
+        34,
+        19,
+        0,
+        169,
+        68
+      ]
+    },
+    {
+      "name": "StakeWithdrawn",
+      "discriminator": [
+        33,
+        120,
+        159,
+        58,
+        140,
+        255,
+        174,
+        79
       ]
     }
   ],
@@ -1049,6 +1560,27 @@
       "name": "InvalidFeeAmount",
       "msg": "Invalid fee amount for selected duration"
     }
+    ,
+    {
+      "code": 6024,
+      "name": "InvalidStakingDuration",
+      "msg": "Invalid staking duration"
+    },
+    {
+      "code": 6025,
+      "name": "TooEarlyClaim",
+      "msg": "Claim available once per 7 days"
+    },
+    {
+      "code": 6026,
+      "name": "NoStakingRewards",
+      "msg": "No staking rewards available"
+    },
+    {
+      "code": 6027,
+      "name": "NoStakedTokens",
+      "msg": "No tokens are currently staked"
+    }
   ],
   "types": [
     {
@@ -1068,15 +1600,55 @@
             "name": "mp_cap_bps_per_wallet",
             "type": "u16"
           },
-          {
-            "name": "update_epoch_seconds",
-            "type": "bool"
-          },
-          {
-            "name": "epoch_seconds",
-            "type": "u64"
-          }
-        ]
+        {
+          "name": "update_epoch_seconds",
+          "type": "bool"
+        },
+        {
+          "name": "epoch_seconds",
+          "type": "u64"
+        },
+        {
+          "name": "update_xp_config",
+          "type": "bool"
+        },
+        {
+          "name": "xp_per_7d",
+          "type": "u64"
+        },
+        {
+          "name": "xp_per_14d",
+          "type": "u64"
+        },
+        {
+          "name": "xp_per_30d",
+          "type": "u64"
+        },
+        {
+          "name": "xp_tier_silver",
+          "type": "u64"
+        },
+        {
+          "name": "xp_tier_gold",
+          "type": "u64"
+        },
+        {
+          "name": "xp_tier_diamond",
+          "type": "u64"
+        },
+        {
+          "name": "xp_boost_silver_bps",
+          "type": "u16"
+        },
+        {
+          "name": "xp_boost_gold_bps",
+          "type": "u16"
+        },
+        {
+          "name": "xp_boost_diamond_bps",
+          "type": "u16"
+        }
+      ]
       }
     },
     {
@@ -1126,6 +1698,10 @@
           },
           {
             "name": "vault_xnt_ata",
+            "type": "pubkey"
+          },
+          {
+            "name": "staking_vault_xnt_ata",
             "type": "pubkey"
           },
           {
@@ -1191,6 +1767,54 @@
           {
             "name": "allow_epoch_seconds_edit",
             "type": "bool"
+          },
+          {
+            "name": "staking_vault_mind_ata",
+            "type": "pubkey"
+          },
+          {
+            "name": "xp_per_7d",
+            "type": "u64"
+          },
+          {
+            "name": "xp_per_14d",
+            "type": "u64"
+          },
+          {
+            "name": "xp_per_30d",
+            "type": "u64"
+          },
+          {
+            "name": "xp_tier_silver",
+            "type": "u64"
+          },
+          {
+            "name": "xp_tier_gold",
+            "type": "u64"
+          },
+          {
+            "name": "xp_tier_diamond",
+            "type": "u64"
+          },
+          {
+            "name": "xp_boost_silver_bps",
+            "type": "u16"
+          },
+          {
+            "name": "xp_boost_gold_bps",
+            "type": "u16"
+          },
+          {
+            "name": "xp_boost_diamond_bps",
+            "type": "u16"
+          },
+          {
+            "name": "total_staked_mind",
+            "type": "u64"
+          },
+          {
+            "name": "total_xp",
+            "type": "u128"
           },
           {
             "name": "bumps",
@@ -1399,6 +2023,42 @@
           {
             "name": "epoch_seconds",
             "type": "u64"
+          },
+          {
+            "name": "xp_per_7d",
+            "type": "u64"
+          },
+          {
+            "name": "xp_per_14d",
+            "type": "u64"
+          },
+          {
+            "name": "xp_per_30d",
+            "type": "u64"
+          },
+          {
+            "name": "xp_tier_silver",
+            "type": "u64"
+          },
+          {
+            "name": "xp_tier_gold",
+            "type": "u64"
+          },
+          {
+            "name": "xp_tier_diamond",
+            "type": "u64"
+          },
+          {
+            "name": "xp_boost_silver_bps",
+            "type": "u16"
+          },
+          {
+            "name": "xp_boost_gold_bps",
+            "type": "u16"
+          },
+          {
+            "name": "xp_boost_diamond_bps",
+            "type": "u16"
           }
         ]
       }
@@ -1465,6 +2125,22 @@
             "type": "u64"
           },
           {
+            "name": "next_stake_index",
+            "type": "u64"
+          },
+          {
+            "name": "mining_xp",
+            "type": "u64"
+          },
+          {
+            "name": "xp_tier",
+            "type": "u8"
+          },
+          {
+            "name": "xp_boost_bps",
+            "type": "u16"
+          },
+          {
             "name": "bump",
             "type": "u8"
           }
@@ -1510,6 +2186,50 @@
           },
           {
             "name": "last_claimed_epoch",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "StakingPosition",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "start_ts",
+            "type": "i64"
+          },
+          {
+            "name": "lock_end_ts",
+            "type": "i64"
+          },
+          {
+            "name": "duration_days",
+            "type": "u16"
+          },
+          {
+            "name": "xp_boost_bps",
+            "type": "u16"
+          },
+          {
+            "name": "last_claim_ts",
+            "type": "i64"
+          },
+          {
+            "name": "stake_index",
             "type": "u64"
           },
           {

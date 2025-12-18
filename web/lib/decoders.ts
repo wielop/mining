@@ -25,6 +25,21 @@ export type DecodedUserEpoch = {
 export type DecodedUserProfile = {
   owner: Uint8Array;
   nextPositionIndex: bigint;
+  nextStakeIndex: bigint;
+  miningXp: bigint;
+  xpTier: number;
+  xpBoostBps: number;
+};
+
+export type DecodedStakingPosition = {
+  owner: Uint8Array;
+  amount: bigint;
+  startTs: number;
+  lockEndTs: number;
+  durationDays: number;
+  xpBoostBps: number;
+  lastClaimTs: number;
+  stakeIndex: bigint;
 };
 
 function assertMinLen(data: Buffer, min: number, label: string) {
@@ -89,11 +104,42 @@ export function decodeUserEpochAccount(data: Buffer): DecodedUserEpoch {
 }
 
 export function decodeUserProfileAccount(data: Buffer): DecodedUserProfile {
-  // discriminator (8) + owner(32) + next_position_index(u64) + bump(u8)
-  assertMinLen(data, 8 + 32 + 8 + 1, "UserProfile");
+  // discriminator (8) + owner(32) + next_position_index(u64) + next_stake_index(u64) +
+  // mining_xp(u64) + xp_tier(u8) + xp_boost_bps(u16) + bump(u8)
+  assertMinLen(data, 8 + 32 + 8 + 8 + 8 + 1 + 2 + 1, "UserProfile");
   let offset = 8;
   const owner = data.subarray(offset, offset + 32);
   offset += 32;
   const nextPositionIndex = data.readBigUInt64LE(offset);
-  return { owner, nextPositionIndex };
+  offset += 8;
+  const nextStakeIndex = data.readBigUInt64LE(offset);
+  offset += 8;
+  const miningXp = data.readBigUInt64LE(offset);
+  offset += 8;
+  const xpTier = data.readUInt8(offset);
+  offset += 1;
+  const xpBoostBps = data.readUInt16LE(offset);
+  return { owner, nextPositionIndex, nextStakeIndex, miningXp, xpTier, xpBoostBps };
+}
+
+export function decodeStakingPositionAccount(data: Buffer): DecodedStakingPosition {
+  // discriminator (8) + StakingPosition fields.
+  assertMinLen(data, 8 + 32 + 8 + 8 + 8 + 2 + 2 + 8 + 8 + 1, "StakingPosition");
+  let offset = 8;
+  const owner = data.subarray(offset, offset + 32);
+  offset += 32;
+  const amount = data.readBigUInt64LE(offset);
+  offset += 8;
+  const startTs = Number(data.readBigInt64LE(offset));
+  offset += 8;
+  const lockEndTs = Number(data.readBigInt64LE(offset));
+  offset += 8;
+  const durationDays = data.readUInt16LE(offset);
+  offset += 2;
+  const xpBoostBps = data.readUInt16LE(offset);
+  offset += 2;
+  const lastClaimTs = Number(data.readBigInt64LE(offset));
+  offset += 8;
+  const stakeIndex = data.readBigUInt64LE(offset);
+  return { owner, amount, startTs, lockEndTs, durationDays, xpBoostBps, lastClaimTs, stakeIndex };
 }
