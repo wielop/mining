@@ -47,8 +47,20 @@ export type DecodedConfig = {
   vaultXntAta: PublicKey;
   mindDecimals: number;
   xntDecimals: number;
+  dailyEmissionInitial: BN;
+  dailyEmissionCurrent: BN;
   epochSeconds: BN;
+  softHalvingPeriodDays: BN;
+  softHalvingBpsDrop: number;
   emissionStartTs: BN;
+  lastEpochTs: BN;
+  minedTotal: BN;
+  minedCap: BN;
+  totalSupplyMind: BN;
+  mpCapBpsPerWallet: number;
+  th1: BN;
+  th2: BN;
+  allowEpochSecondsEdit: boolean;
 };
 
 export async function fetchClockUnixTs(connection: Connection) {
@@ -78,6 +90,7 @@ export async function fetchConfig(connection: Connection): Promise<DecodedConfig
     return pk;
   };
   const readU8 = () => data.readUInt8(offset++);
+  const readBool = () => data.readUInt8(offset++) !== 0;
   const readU16 = () => {
     const v = data.readUInt16LE(offset);
     offset += 2;
@@ -100,12 +113,23 @@ export async function fetchConfig(connection: Connection): Promise<DecodedConfig
   const vaultXntAta = readPubkey();
   const mindDecimals = readU8();
   const xntDecimals = readU8();
-  readU64();
-  readU64();
+  const dailyEmissionInitial = readU64();
+  const dailyEmissionCurrent = readU64();
   const epochSeconds = readU64();
-  readU64();
-  readU16();
+  const softHalvingPeriodDays = readU64();
+  const softHalvingBpsDrop = readU16();
   const emissionStartTs = readI64();
+  const lastEpochTs = readI64();
+  const minedTotal = readU64();
+  const minedCap = readU64();
+  const totalSupplyMind = readU64();
+  const mpCapBpsPerWallet = readU16();
+  const th1 = readU64();
+  const th2 = readU64();
+  const allowEpochSecondsEdit = readBool();
+  // bumps: 2x u8
+  readU8();
+  readU8();
 
   return {
     admin,
@@ -114,8 +138,20 @@ export async function fetchConfig(connection: Connection): Promise<DecodedConfig
     vaultXntAta,
     mindDecimals,
     xntDecimals,
+    dailyEmissionInitial,
+    dailyEmissionCurrent,
     epochSeconds,
+    softHalvingPeriodDays,
+    softHalvingBpsDrop,
     emissionStartTs,
+    lastEpochTs,
+    minedTotal,
+    minedCap,
+    totalSupplyMind,
+    mpCapBpsPerWallet,
+    th1,
+    th2,
+    allowEpochSecondsEdit,
   };
 }
 
@@ -133,4 +169,3 @@ export async function fetchTokenBalanceUi(connection: Connection, ata: PublicKey
     return "0";
   }
 }
-

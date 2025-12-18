@@ -2,6 +2,7 @@ import "./globals.css";
 import "@solana/wallet-adapter-react-ui/styles.css";
 import type { Metadata } from "next";
 import { WalletProviders } from "@/components/WalletProviders";
+import { ToastProvider } from "@/components/shared/ToastProvider";
 
 export const metadata: Metadata = {
   title: "PoCM Mining",
@@ -16,9 +17,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <WalletProviders>{children}</WalletProviders>
+        <WalletProviders>
+          <ToastProvider>{children}</ToastProvider>
+        </WalletProviders>
       </body>
     </html>
   );
 }
-

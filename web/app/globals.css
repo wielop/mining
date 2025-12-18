@@ -9,9 +9,32 @@ body {
 
 body {
   @apply bg-zinc-950 text-zinc-100;
+  background-image:
+    radial-gradient(1000px 600px at 10% 10%, rgba(34, 211, 238, 0.18), transparent 60%),
+    radial-gradient(900px 500px at 90% 20%, rgba(217, 70, 239, 0.14), transparent 55%),
+    radial-gradient(800px 400px at 50% 90%, rgba(59, 130, 246, 0.08), transparent 60%);
 }
 
 a {
   @apply underline underline-offset-4;
 }
 
+/* Wallet Adapter button theme tweaks (Solana-style) */
+.wallet-adapter-button {
+  border-radius: 0.9rem !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  background: linear-gradient(to bottom, rgba(34, 211, 238, 0.25), rgba(217, 70, 239, 0.18)) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+  font-weight: 600 !important;
+  transition: filter 150ms ease, transform 150ms ease !important;
+}
+.wallet-adapter-button:hover {
+  filter: brightness(1.08) !important;
+}
+.wallet-adapter-button:not([disabled]):active {
+  transform: translateY(1px) !important;
+}
+.wallet-adapter-modal-wrapper {
+  background: rgba(9, 9, 11, 0.75) !important;
+  backdrop-filter: blur(16px) !important;
+}
