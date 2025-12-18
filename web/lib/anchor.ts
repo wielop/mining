@@ -8,6 +8,8 @@ import { PROGRAM_ID } from "@/lib/solana";
 // which breaks Anchor's `program.account.*` helpers. We only use `.methods`.
 const idlForClient = {
   ...idl,
+  // Ensure the Program ID matches the runtime config.
+  address: PROGRAM_ID.toBase58(),
   accounts: [],
 };
 
@@ -15,6 +17,7 @@ export function getProgram(connection: Connection, wallet: AnchorWallet) {
   const provider = new anchor.AnchorProvider(connection, wallet, {
     commitment: "confirmed",
   });
+  // Anchor v0.30+ Program constructor signature: `new Program(idl, provider, coder?, resolver?)`.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return new (anchor as any).Program(idlForClient, PROGRAM_ID, provider);
+  return new (anchor as any).Program(idlForClient, provider);
 }
