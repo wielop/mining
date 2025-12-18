@@ -28,6 +28,21 @@ import {
 import { getProgram } from "@/lib/anchor";
 import { formatError } from "@/lib/formatError";
 
+function parseAmountToBaseUnits(amount: string, decimals: number): bigint {
+  const trimmed = amount.trim();
+  if (!trimmed) throw new Error("Amount is required");
+  if (!/^\d+(\.\d+)?$/.test(trimmed)) throw new Error("Invalid amount format");
+  const [whole, frac = ""] = trimmed.split(".");
+  const fracPadded = (frac + "0".repeat(decimals)).slice(0, decimals);
+  const base = BigInt(10) ** BigInt(decimals);
+  return BigInt(whole) * base + BigInt(fracPadded || "0");
+}
+
+function safeBigintToNumber(value: bigint): number {
+  if (value > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("Amount is too large");
+  return Number(value);
+}
+
 export function PublicPanel() {
   const { connection } = useConnection();
   const { publicKey, signTransaction, sendTransaction } = useWallet();
@@ -113,15 +128,30 @@ export function PublicPanel() {
     try {
       const program = getProgram(connection, anchorWallet!);
       const xntMint = config.xntMint;
-      const amountUi = Number(depositAmount);
-      if (!Number.isFinite(amountUi) || amountUi <= 0) throw new Error("Invalid amount");
-      const amountBase = BigInt(Math.floor(amountUi * 10 ** config.xntDecimals));
+      const amountBase = parseAmountToBaseUnits(depositAmount, config.xntDecimals);
 
       const ownerXntAta = getAssociatedTokenAddressSync(xntMint, publicKey!);
       const vaultAuthority = deriveVaultPda();
       const vaultXntAta = getAssociatedTokenAddressSync(xntMint, vaultAuthority, true);
 
       const tx = new Transaction();
+
+      const position = derivePositionPda(publicKey!);
+      const posInfo = await connection.getAccountInfo(position, "confirmed");
+      if (!posInfo) {
+        const days = Number(durationDays);
+        if (!Number.isFinite(days) || days <= 0) throw new Error("Invalid durationDays");
+        const createPositionIx = await program.methods
+          .createPosition(days)
+          .accounts({
+            owner: publicKey!,
+            config: deriveConfigPda(),
+            position,
+            systemProgram: SystemProgram.programId,
+          })
+          .instruction();
+        tx.add(createPositionIx);
+      }
 
       tx.add(
         createAssociatedTokenAccountIdempotentInstruction(
@@ -139,14 +169,13 @@ export function PublicPanel() {
           SystemProgram.transfer({
             fromPubkey: publicKey!,
             toPubkey: ownerXntAta,
-            lamports: amountBase,
+            lamports: safeBigintToNumber(amountBase),
           }),
           createSyncNativeInstruction(ownerXntAta)
         );
       }
 
       const amountBn = new BN(amountBase.toString());
-      const position = derivePositionPda(publicKey!);
       const depositIx = await program.methods
         .deposit(amountBn)
         .accounts({
@@ -282,14 +311,15 @@ export function PublicPanel() {
       <Card title="Actions">
         <div className="grid gap-4 md:grid-cols-2">
           <div className="grid gap-2">
-            <div className="text-xs text-zinc-400">Create position</div>
+            <div className="text-xs text-zinc-400">
+              Lock duration (days) {positionExists ? "(already set for this wallet)" : ""}
+            </div>
             <Input value={durationDays} onChange={setDurationDays} placeholder="duration days (7/14/30)" />
-            <Button
-              disabled={!publicKey || busy !== null}
-              onClick={() => void createPosition().catch((e) => setError(formatError(e)))}
-            >
-              {busy === "createPosition" ? "Working..." : "Create position"}
-            </Button>
+            {!positionExists ? (
+              <div className="text-xs text-zinc-500">
+                This is a one-time choice per wallet (7/14/30). To change it, use a new wallet.
+              </div>
+            ) : null}
           </div>
 
           <div className="grid gap-2">
@@ -301,7 +331,11 @@ export function PublicPanel() {
               disabled={!publicKey || busy !== null}
               onClick={() => void deposit().catch((e) => setError(formatError(e)))}
             >
-              {busy === "deposit" ? "Working..." : "Deposit"}
+              {busy === "deposit"
+                ? "Working..."
+                : positionExists
+                  ? "Deposit"
+                  : "Create position + Deposit"}
             </Button>
           </div>
 
