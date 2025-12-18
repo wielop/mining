@@ -5,6 +5,7 @@ export function formatError(e: unknown) {
     const anyErr = e as any;
     const parts: string[] = [];
     parts.push(anyErr?.message ? String(anyErr.message) : e.name);
+    if (anyErr?.stack) parts.push(String(anyErr.stack));
     if (anyErr?.code != null) parts.push(`code=${anyErr.code}`);
     if (anyErr?.signature) parts.push(`sig=${anyErr.signature}`);
     const logs =
@@ -23,4 +24,3 @@ export function formatError(e: unknown) {
     return String(e);
   }
 }
-

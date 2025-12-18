@@ -114,6 +114,10 @@ export function PublicPanel() {
         .rpc();
       setLastSig(sig);
       await refresh();
+    } catch (e: unknown) {
+      console.error("[PublicPanel] createPosition failed", e);
+      setError(formatError(e));
+      throw e;
     } finally {
       setBusy(null);
     }
@@ -196,6 +200,7 @@ export function PublicPanel() {
       setLastSig(sig);
       await refresh();
     } catch (e: any) {
+      console.error("[PublicPanel] deposit failed", e);
       setError(formatError(e));
       throw e;
     } finally {
@@ -229,6 +234,7 @@ export function PublicPanel() {
       setLastSig(sig);
       await refresh();
     } catch (e: any) {
+      console.error("[PublicPanel] heartbeat failed", e);
       setError(formatError(e));
       throw e;
     } finally {
@@ -269,6 +275,7 @@ export function PublicPanel() {
       setLastSig(sig);
       await refresh();
     } catch (e: any) {
+      console.error("[PublicPanel] claim failed", e);
       setError(formatError(e));
       throw e;
     } finally {
