@@ -44,6 +44,11 @@ function safeBigintToNumber(value: bigint): number {
   return Number(value);
 }
 
+function formatEpochCountdown(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "now";
+  return formatDurationSeconds(seconds);
+}
+
 function planFeeBase(durationDays: 7 | 14 | 30, decimals: number): bigint {
   const base = 10n ** BigInt(decimals);
   if (durationDays === 7) return base / 10n; // 0.1
@@ -99,6 +104,17 @@ export function PublicDashboard() {
   const emissionNotStarted = useMemo(() => {
     if (!config || nowTs == null) return false;
     return nowTs < config.emissionStartTs.toNumber();
+  }, [config, nowTs]);
+
+  const nextEpochCountdown = useMemo(() => {
+    if (!config || nowTs == null) return null;
+    if (nowTs < config.emissionStartTs.toNumber()) {
+      return { label: "starts in", seconds: Math.max(0, config.emissionStartTs.toNumber() - nowTs) };
+    }
+    const epoch = getCurrentEpochFrom(config, nowTs);
+    const epochStart = config.emissionStartTs.toNumber() + epoch * config.epochSeconds.toNumber();
+    const nextStart = epochStart + config.epochSeconds.toNumber();
+    return { label: "next epoch in", seconds: Math.max(0, nextStart - nowTs) };
   }, [config, nowTs]);
 
   const activePositions = useMemo(() => {
@@ -242,6 +258,15 @@ export function PublicDashboard() {
 
     setBusy("buy");
     try {
+      if (heartbeatDone && nextEpochCountdown) {
+        pushToast({
+          title: "Heads up",
+          description: `You already heartbeated this epoch. This miner starts earning ${nextEpochCountdown.label} ${formatEpochCountdown(
+            nextEpochCountdown.seconds
+          )}.`,
+          variant: "info",
+        });
+      }
       await withTx("Buy mining position", async () => {
         const program = getProgram(connection, anchorWallet);
         const tx = new Transaction();
@@ -494,6 +519,12 @@ export function PublicDashboard() {
                   <div className="mt-1 font-mono text-lg">
                     {currentEpoch == null ? <Skeleton className="h-6 w-24" /> : currentEpoch}
                   </div>
+                  {nextEpochCountdown ? (
+                    <div className="mt-2 text-xs text-zinc-400">
+                      {nextEpochCountdown.label}{" "}
+                      <span className="font-mono text-zinc-200">{formatEpochCountdown(nextEpochCountdown.seconds)}</span>
+                    </div>
+                  ) : null}
                 </div>
                 <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                   <div className="text-xs text-zinc-400">On-chain time (Clock)</div>
@@ -592,6 +623,15 @@ export function PublicDashboard() {
                     <div className="rounded-xl border border-amber-500/20 bg-amber-950/20 p-3 text-xs text-amber-100">
                       Deposit is non-refundable (treasury fee). You can buy multiple miners.
                     </div>
+                    {publicKey && heartbeatDone && nextEpochCountdown ? (
+                      <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-zinc-300">
+                        You already recorded heartbeat for this epoch. New miners start earning{" "}
+                        <span className="font-mono">
+                          {nextEpochCountdown.label} {formatEpochCountdown(nextEpochCountdown.seconds)}
+                        </span>
+                        .
+                      </div>
+                    ) : null}
                     <Button
                       size="lg"
                       onClick={() => void onDeposit().catch(() => null)}
@@ -610,6 +650,12 @@ export function PublicDashboard() {
           <div className="md:col-span-7">
             <Card>
               <CardHeader title="Epoch Actions" description="These actions are only relevant while your lock is active." />
+              {nextEpochCountdown ? (
+                <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-zinc-300">
+                  {nextEpochCountdown.label}{" "}
+                  <span className="font-mono text-zinc-100">{formatEpochCountdown(nextEpochCountdown.seconds)}</span>
+                </div>
+              ) : null}
               {!publicKey ? (
                 <div className="mt-4 text-sm text-zinc-400">Connect wallet to see epoch actions.</div>
               ) : !anyActive ? (
@@ -630,7 +676,15 @@ export function PublicDashboard() {
                       <Button
                         onClick={() => void onHeartbeat().catch(() => null)}
                         disabled={busy !== null || heartbeatDone || currentEpoch == null}
-                        title={heartbeatDone ? "Already recorded" : undefined}
+                        title={
+                          heartbeatDone
+                            ? nextEpochCountdown
+                              ? `Already recorded. Next epoch in ${formatEpochCountdown(nextEpochCountdown.seconds)}`
+                              : "Already recorded"
+                            : currentEpoch == null
+                              ? "Epoch unavailable"
+                              : undefined
+                        }
                       >
                         {busy === "heartbeat" ? "Submitting…" : "Heartbeat current epoch"}
                       </Button>
