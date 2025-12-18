@@ -1,0 +1,1525 @@
+{
+  "address": "4BwetFdBHSkDTAByraaXiiwLFTQ5jj8w4mHGpYMrNn4r",
+  "metadata": {
+    "name": "pocm_vault_mining",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Proof-of-Commitment Mining vault for X1"
+  },
+  "instructions": [
+    {
+      "name": "admin_update_config",
+      "discriminator": [
+        224,
+        243,
+        100,
+        135,
+        120,
+        165,
+        43,
+        244
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "AdminUpdateParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "claim",
+      "discriminator": [
+        62,
+        198,
+        214,
+        193,
+        213,
+        159,
+        108,
+        210
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "epoch_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  112,
+                  111,
+                  99,
+                  104
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "epoch_state.epoch_index",
+                "account": "EpochState"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_epoch",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  101,
+                  112,
+                  111,
+                  99,
+                  104
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "account",
+                "path": "user_epoch.epoch_index",
+                "account": "UserEpoch"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mind_mint",
+          "writable": true
+        },
+        {
+          "name": "user_mind_ata",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "const",
+                "value": [
+                  6,
+                  221,
+                  246,
+                  225,
+                  215,
+                  101,
+                  161,
+                  147,
+                  217,
+                  203,
+                  225,
+                  70,
+                  206,
+                  235,
+                  121,
+                  172,
+                  28,
+                  180,
+                  133,
+                  237,
+                  95,
+                  91,
+                  55,
+                  145,
+                  58,
+                  140,
+                  245,
+                  133,
+                  126,
+                  6,
+                  160,
+                  216
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mind_mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                247,
+                187,
+                62,
+                102,
+                91,
+                165,
+                104,
+                221,
+                50,
+                243,
+                87,
+                171,
+                39,
+                48,
+                231,
+                0,
+                240,
+                57,
+                22,
+                125,
+                155,
+                34,
+                219,
+                108,
+                233
+              ]
+            }
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "create_position",
+      "discriminator": [
+        31,
+        124,
+        89,
+        58,
+        208,
+        66,
+        84,
+        18
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "duration_days",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "deposit",
+      "discriminator": [
+        242,
+        35,
+        198,
+        137,
+        82,
+        225,
+        242,
+        182
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "xnt_mint"
+        },
+        {
+          "name": "vault_xnt_ata",
+          "writable": true
+        },
+        {
+          "name": "owner_xnt_ata",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "heartbeat",
+      "discriminator": [
+        42,
+        124,
+        34,
+        76,
+        71,
+        175,
+        232,
+        75
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "epoch_state",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  112,
+                  111,
+                  99,
+                  104
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "epoch_index"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_epoch",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114,
+                  95,
+                  101,
+                  112,
+                  111,
+                  99,
+                  104
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              },
+              {
+                "kind": "arg",
+                "path": "epoch_index"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "epoch_index",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "initialize",
+      "discriminator": [
+        175,
+        175,
+        109,
+        31,
+        13,
+        152,
+        155,
+        237
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "vault_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mind_mint"
+        },
+        {
+          "name": "xnt_mint"
+        },
+        {
+          "name": "vault_xnt_ata"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "InitializeParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "withdraw",
+      "discriminator": [
+        183,
+        18,
+        70,
+        156,
+        148,
+        109,
+        161,
+        34
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "xnt_mint"
+        },
+        {
+          "name": "vault_xnt_ata",
+          "writable": true
+        },
+        {
+          "name": "owner_xnt_ata",
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Config",
+      "discriminator": [
+        155,
+        12,
+        170,
+        224,
+        30,
+        250,
+        204,
+        130
+      ]
+    },
+    {
+      "name": "EpochState",
+      "discriminator": [
+        231,
+        4,
+        72,
+        212,
+        209,
+        205,
+        218,
+        94
+      ]
+    },
+    {
+      "name": "UserEpoch",
+      "discriminator": [
+        210,
+        104,
+        21,
+        48,
+        167,
+        221,
+        23,
+        238
+      ]
+    },
+    {
+      "name": "UserPosition",
+      "discriminator": [
+        173,
+        219,
+        133,
+        230,
+        213,
+        112,
+        168,
+        120
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "Claimed",
+      "discriminator": [
+        65,
+        118,
+        33,
+        79,
+        62,
+        6,
+        135,
+        175
+      ]
+    },
+    {
+      "name": "ConfigUpdated",
+      "discriminator": [
+        115,
+        158,
+        104,
+        75,
+        165,
+        114,
+        21,
+        147
+      ]
+    },
+    {
+      "name": "Deposited",
+      "discriminator": [
+        166,
+        242,
+        50,
+        106,
+        171,
+        54,
+        75,
+        20
+      ]
+    },
+    {
+      "name": "HeartbeatEvent",
+      "discriminator": [
+        232,
+        63,
+        55,
+        104,
+        96,
+        125,
+        32,
+        219
+      ]
+    },
+    {
+      "name": "InitializeEvent",
+      "discriminator": [
+        243,
+        123,
+        132,
+        31,
+        171,
+        72,
+        115,
+        159
+      ]
+    },
+    {
+      "name": "PositionCreated",
+      "discriminator": [
+        115,
+        200,
+        100,
+        87,
+        137,
+        98,
+        62,
+        158
+      ]
+    },
+    {
+      "name": "Withdrawn",
+      "discriminator": [
+        29,
+        55,
+        18,
+        211,
+        163,
+        46,
+        102,
+        69
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "InvalidDuration",
+      "msg": "Invalid mining duration"
+    },
+    {
+      "code": 6001,
+      "name": "InvalidPercentage",
+      "msg": "Invalid percentage value"
+    },
+    {
+      "code": 6002,
+      "name": "InvalidSupply",
+      "msg": "Invalid total supply"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidCap",
+      "msg": "Mining cap must be positive"
+    },
+    {
+      "code": 6004,
+      "name": "MathOverflow",
+      "msg": "Math overflow"
+    },
+    {
+      "code": 6005,
+      "name": "BumpNotFound",
+      "msg": "Bump not found"
+    },
+    {
+      "code": 6006,
+      "name": "Unauthorized",
+      "msg": "Only owner can perform this action"
+    },
+    {
+      "code": 6007,
+      "name": "PositionActive",
+      "msg": "Position already active"
+    },
+    {
+      "code": 6008,
+      "name": "InactivePosition",
+      "msg": "Position is inactive"
+    },
+    {
+      "code": 6009,
+      "name": "LockExpired",
+      "msg": "Lock already expired"
+    },
+    {
+      "code": 6010,
+      "name": "LockNotFinished",
+      "msg": "Lock not finished"
+    },
+    {
+      "code": 6011,
+      "name": "InvalidAmount",
+      "msg": "Invalid amount"
+    },
+    {
+      "code": 6012,
+      "name": "InvalidEpochIndex",
+      "msg": "Epoch index mismatch"
+    },
+    {
+      "code": 6013,
+      "name": "ZeroMiningPower",
+      "msg": "Mining power is zero"
+    },
+    {
+      "code": 6014,
+      "name": "EmissionDepleted",
+      "msg": "Nothing left to emit"
+    },
+    {
+      "code": 6015,
+      "name": "NothingToClaim",
+      "msg": "Nothing to claim"
+    },
+    {
+      "code": 6016,
+      "name": "AlreadyClaimed",
+      "msg": "Epoch already claimed"
+    },
+    {
+      "code": 6017,
+      "name": "NoEpochPower",
+      "msg": "No mining power recorded for epoch"
+    },
+    {
+      "code": 6018,
+      "name": "BeforeStart",
+      "msg": "Emission not started yet"
+    },
+    {
+      "code": 6019,
+      "name": "InvalidEpochLength",
+      "msg": "Epoch length invalid"
+    },
+    {
+      "code": 6020,
+      "name": "EpochEditDisabled",
+      "msg": "Epoch length edits are disabled"
+    }
+  ],
+  "types": [
+    {
+      "name": "AdminUpdateParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "th1",
+            "type": "u64"
+          },
+          {
+            "name": "th2",
+            "type": "u64"
+          },
+          {
+            "name": "mp_cap_bps_per_wallet",
+            "type": "u16"
+          },
+          {
+            "name": "update_epoch_seconds",
+            "type": "bool"
+          },
+          {
+            "name": "epoch_seconds",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Claimed",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "epoch_index",
+            "type": "u64"
+          },
+          {
+            "name": "reward",
+            "type": "u64"
+          },
+          {
+            "name": "capped_user_mp",
+            "type": "u128"
+          },
+          {
+            "name": "total_epoch_mp",
+            "type": "u128"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Config",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "xnt_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "mind_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault_xnt_ata",
+            "type": "pubkey"
+          },
+          {
+            "name": "mind_decimals",
+            "type": "u8"
+          },
+          {
+            "name": "xnt_decimals",
+            "type": "u8"
+          },
+          {
+            "name": "daily_emission_initial",
+            "type": "u64"
+          },
+          {
+            "name": "daily_emission_current",
+            "type": "u64"
+          },
+          {
+            "name": "epoch_seconds",
+            "type": "u64"
+          },
+          {
+            "name": "soft_halving_period_days",
+            "type": "u64"
+          },
+          {
+            "name": "soft_halving_bps_drop",
+            "type": "u16"
+          },
+          {
+            "name": "emission_start_ts",
+            "type": "i64"
+          },
+          {
+            "name": "last_epoch_ts",
+            "type": "i64"
+          },
+          {
+            "name": "mined_total",
+            "type": "u64"
+          },
+          {
+            "name": "mined_cap",
+            "type": "u64"
+          },
+          {
+            "name": "total_supply_mind",
+            "type": "u64"
+          },
+          {
+            "name": "mp_cap_bps_per_wallet",
+            "type": "u16"
+          },
+          {
+            "name": "th1",
+            "type": "u64"
+          },
+          {
+            "name": "th2",
+            "type": "u64"
+          },
+          {
+            "name": "allow_epoch_seconds_edit",
+            "type": "bool"
+          },
+          {
+            "name": "bumps",
+            "type": {
+              "defined": {
+                "name": "ConfigBumps"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "ConfigBumps",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "config",
+            "type": "u8"
+          },
+          {
+            "name": "vault_authority",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ConfigUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "th1",
+            "type": "u64"
+          },
+          {
+            "name": "th2",
+            "type": "u64"
+          },
+          {
+            "name": "mp_cap_bps_per_wallet",
+            "type": "u16"
+          },
+          {
+            "name": "epoch_seconds",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Deposited",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "lock_end_ts",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EpochState",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "epoch_index",
+            "type": "u64"
+          },
+          {
+            "name": "start_ts",
+            "type": "i64"
+          },
+          {
+            "name": "end_ts",
+            "type": "i64"
+          },
+          {
+            "name": "total_effective_mp",
+            "type": "u128"
+          },
+          {
+            "name": "daily_emission",
+            "type": "u64"
+          },
+          {
+            "name": "finalized",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "HeartbeatEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "epoch_index",
+            "type": "u64"
+          },
+          {
+            "name": "user_mp",
+            "type": "u128"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InitializeEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "xnt_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "mind_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "epoch_seconds",
+            "type": "u64"
+          },
+          {
+            "name": "mind_decimals",
+            "type": "u8"
+          },
+          {
+            "name": "mined_cap",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InitializeParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "xnt_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "mind_decimals",
+            "type": "u8"
+          },
+          {
+            "name": "xnt_decimals",
+            "type": "u8"
+          },
+          {
+            "name": "total_supply_mind",
+            "type": "u64"
+          },
+          {
+            "name": "mined_cap_pct_bps",
+            "type": "u16"
+          },
+          {
+            "name": "th1",
+            "type": "u64"
+          },
+          {
+            "name": "th2",
+            "type": "u64"
+          },
+          {
+            "name": "allow_epoch_seconds_edit",
+            "type": "bool"
+          },
+          {
+            "name": "epoch_seconds",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PositionCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "duration_days",
+            "type": "u16"
+          },
+          {
+            "name": "time_multiplier_bps",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UserEpoch",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "epoch_index",
+            "type": "u64"
+          },
+          {
+            "name": "user_mp",
+            "type": "u128"
+          },
+          {
+            "name": "claimed",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UserPosition",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "locked_amount",
+            "type": "u64"
+          },
+          {
+            "name": "lock_start_ts",
+            "type": "i64"
+          },
+          {
+            "name": "lock_end_ts",
+            "type": "i64"
+          },
+          {
+            "name": "duration_days",
+            "type": "u16"
+          },
+          {
+            "name": "time_multiplier_bps",
+            "type": "u16"
+          },
+          {
+            "name": "last_active_epoch",
+            "type": "u64"
+          },
+          {
+            "name": "accrued_owed",
+            "type": "u64"
+          },
+          {
+            "name": "last_claimed_epoch",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Withdrawn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    }
+  ]
+}
+

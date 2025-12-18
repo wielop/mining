@@ -57,6 +57,17 @@ All scripts read `.env` (RPC_URL, WALLET, PROGRAM_ID, etc.).
 - `yarn claim` – claims for the given/current epoch.
 - `yarn withdraw` – withdraws after lock expiry.
 
+## Web app (Vercel)
+
+The `web/` folder contains a public UI (`/`) and an admin UI (`/admin`) for interacting with the deployed program.
+
+Vercel setup:
+- Import the GitHub repo.
+- Set **Root Directory** to `web`.
+- Env vars:
+  - `NEXT_PUBLIC_RPC_URL` (default: `https://rpc.testnet.x1.xyz`)
+  - `NEXT_PUBLIC_PROGRAM_ID` (default: `4BwetFdBHSkDTAByraaXiiwLFTQ5jj8w4mHGpYMrNn4r`)
+
 ### Env hints
 - `XNT_MINT` – existing XNT mint (not hardcoded).
 - `TOTAL_SUPPLY_MIND` – base units for full MIND supply; `MINED_CAP_BPS` sets the emission cap percentage.
