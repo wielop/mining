@@ -345,32 +345,27 @@ export function PublicDashboard() {
     return { points: points.join(" "), min, max };
   }, [rewardPoolHistory]);
 
-  const estimateStakeRewardBase = useCallback(
+  const estimateStakeRewardParts = useCallback(
     (amountBase: bigint, boostBps: number, totalStakedBase: bigint, vaultBase: bigint) => {
       if (amountBase <= 0n || totalStakedBase <= 0n || vaultBase <= 0n) return null;
-      const rewardBase = (vaultBase * amountBase) / totalStakedBase;
-      const reward = (rewardBase * BigInt(10_000 + boostBps)) / 10_000n;
-      return reward;
+      const base = (vaultBase * amountBase) / totalStakedBase;
+      const boosted = (base * BigInt(10_000 + boostBps)) / 10_000n;
+      return { base, boosted };
     },
     []
   );
 
-  const stakeEstimateBase = useMemo(() => {
+  const stakeEstimate = useMemo(() => {
     if (!config || !userProfile || stakingVaultXntBalanceBase == null) return null;
     try {
       const amountBase = parseUiAmountToBase(stakeAmountUi, config.mindDecimals);
       if (amountBase <= 0n) return null;
       const totalStaked = BigInt(config.totalStakedMind.toString()) + amountBase;
-      return estimateStakeRewardBase(
-        amountBase,
-        userProfile.xpBoostBps,
-        totalStaked,
-        stakingVaultXntBalanceBase
-      );
+      return estimateStakeRewardParts(amountBase, userProfile.xpBoostBps, totalStaked, stakingVaultXntBalanceBase);
     } catch {
       return null;
     }
-  }, [config, estimateStakeRewardBase, stakeAmountUi, stakingVaultXntBalanceBase, userProfile]);
+  }, [config, estimateStakeRewardParts, stakeAmountUi, stakingVaultXntBalanceBase, userProfile]);
 
   useEffect(() => {
     void refresh();
@@ -1213,10 +1208,18 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
                   </Button>
                 </div>
                 <div className="mt-2 text-xs text-zinc-400">
-                  Est. weekly reward:{" "}
+                  Pool share (base):{" "}
                   <span className="font-mono text-zinc-200">
-                    {config && stakeEstimateBase != null
-                      ? `${formatTokenAmount(stakeEstimateBase, config.xntDecimals, 6)} XNT`
+                    {config && stakeEstimate?.base != null
+                      ? `${formatTokenAmount(stakeEstimate.base, config.xntDecimals, 6)} XNT`
+                      : "-"}
+                  </span>
+                </div>
+                <div className="mt-1 text-xs text-zinc-400">
+                  Est. weekly reward (with XP):{" "}
+                  <span className="font-mono text-zinc-200">
+                    {config && stakeEstimate?.boosted != null
+                      ? `${formatTokenAmount(stakeEstimate.boosted, config.xntDecimals, 6)} XNT`
                       : "-"}
                   </span>
                 </div>
@@ -1411,9 +1414,9 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
                     const startTs = stake.data.startTs;
                     const amount = stake.data.amount;
                     const totalStakedBase = config ? BigInt(config.totalStakedMind.toString()) : 0n;
-                    const rewardEstimateBase =
+                    const rewardEstimate =
                       config && stakingVaultXntBalanceBase != null
-                        ? estimateStakeRewardBase(
+                        ? estimateStakeRewardParts(
                             amount,
                             stake.data.xpBoostBps,
                             totalStakedBase,
@@ -1462,10 +1465,18 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
                           XP boost: <span className="font-mono text-zinc-200">+{formatBps(stake.data.xpBoostBps)}</span>
                         </div>
                         <div className="mt-2 text-xs text-zinc-400">
-                          Est. weekly reward:{" "}
+                          Pool share (base):{" "}
                           <span className="font-mono text-zinc-200">
-                            {config && rewardEstimateBase != null
-                              ? `${formatTokenAmount(rewardEstimateBase, config.xntDecimals, 6)} XNT`
+                            {config && rewardEstimate?.base != null
+                              ? `${formatTokenAmount(rewardEstimate.base, config.xntDecimals, 6)} XNT`
+                              : "-"}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-xs text-zinc-400">
+                          Est. weekly reward (with XP):{" "}
+                          <span className="font-mono text-zinc-200">
+                            {config && rewardEstimate?.boosted != null
+                              ? `${formatTokenAmount(rewardEstimate.boosted, config.xntDecimals, 6)} XNT`
                               : "-"}
                           </span>
                         </div>
