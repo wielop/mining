@@ -11,6 +11,7 @@ const idlForClient = {
   // Ensure the Program ID matches the runtime config.
   address: getProgramId().toBase58(),
   accounts: [],
+  events: [],
 };
 
 export function getProgram(connection: Connection, wallet: AnchorWallet) {
