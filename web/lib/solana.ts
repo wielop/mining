@@ -202,33 +202,52 @@ export async function fetchConfig(connection: Connection): Promise<DecodedConfig
     throw new Error(`Config not found: ${configPda.toBase58()}`);
   }
   const data = info.data;
-  if (data.length < 233) {
+  if (data.length < 8) {
     throw new Error(`Config account too small: ${data.length} bytes`);
   }
   let offset = 8;
+  const ensure = (size: number, label: string) => {
+    if (offset + size > data.length) {
+      throw new Error(
+        `Config layout mismatch: need ${offset + size} bytes for ${label}, got ${data.length}. ` +
+          "Check NEXT_PUBLIC_PROGRAM_ID and IDL/version."
+      );
+    }
+  };
   const readPubkey = () => {
+    ensure(32, "pubkey");
     const pk = new PublicKey(data.subarray(offset, offset + 32));
     offset += 32;
     return pk;
   };
-  const readU8 = () => data.readUInt8(offset++);
-  const readBool = () => data.readUInt8(offset++) !== 0;
+  const readU8 = () => {
+    ensure(1, "u8");
+    return data.readUInt8(offset++);
+  };
+  const readBool = () => {
+    ensure(1, "bool");
+    return data.readUInt8(offset++) !== 0;
+  };
   const readU16 = () => {
+    ensure(2, "u16");
     const v = data.readUInt16LE(offset);
     offset += 2;
     return v;
   };
   const readU64 = () => {
+    ensure(8, "u64");
     const v = data.readBigUInt64LE(offset);
     offset += 8;
     return new BN(v.toString());
   };
   const readI64 = () => {
+    ensure(8, "i64");
     const v = data.readBigInt64LE(offset);
     offset += 8;
     return new BN(v.toString());
   };
   const readU128 = () => {
+    ensure(16, "u128");
     const lo = data.readBigUInt64LE(offset);
     const hi = data.readBigUInt64LE(offset + 8);
     offset += 16;
