@@ -11,8 +11,6 @@ const CONFIG_SEED: &[u8] = b"config";
 const VAULT_SEED: &[u8] = b"vault";
 const POSITION_SEED: &[u8] = b"position";
 const PROFILE_SEED: &[u8] = b"profile";
-const EPOCH_SEED: &[u8] = b"epoch";
-const USER_EPOCH_SEED: &[u8] = b"user_epoch";
 const BPS_DENOMINATOR: u128 = 10_000;
 const DEFAULT_EPOCH_SECONDS: u64 = 86_400;
 const SECONDS_PER_DAY: i64 = 86_400;
@@ -60,8 +58,8 @@ pub mod pocm_vault_mining {
 
         let now = Clock::get()?.unix_timestamp;
         let bumps = ConfigBumps {
-            config: ctx.bumps.config,
-            vault_authority: ctx.bumps.vault_authority,
+            config: *ctx.bumps.get("config").unwrap(),
+            vault_authority: *ctx.bumps.get("vault_authority").unwrap(),
         };
 
         let config = &mut ctx.accounts.config;
@@ -127,7 +125,7 @@ pub mod pocm_vault_mining {
             ctx.accounts.user_profile.mining_xp = 0;
             ctx.accounts.user_profile.xp_tier = 0;
             ctx.accounts.user_profile.xp_boost_bps = 0;
-            ctx.accounts.user_profile.bump = ctx.bumps.user_profile;
+            ctx.accounts.user_profile.bump = *ctx.bumps.get("user_profile").unwrap();
         }
         require_keys_eq!(
             ctx.accounts.user_profile.owner,
@@ -149,7 +147,7 @@ pub mod pocm_vault_mining {
         position.last_active_epoch = 0;
         position.accrued_owed = 0;
         position.last_claimed_epoch = 0;
-        position.bump = ctx.bumps.position;
+        position.bump = *ctx.bumps.get("position").unwrap();
 
         ctx.accounts.user_profile.next_position_index = ctx
             .accounts
@@ -283,7 +281,7 @@ pub mod pocm_vault_mining {
         position.xp_boost_bps = ctx.accounts.user_profile.xp_boost_bps;
         position.last_claim_ts = now;
         position.stake_index = position_index;
-        position.bump = ctx.bumps.staking_position;
+        position.bump = *ctx.bumps.get("staking_position").unwrap();
 
         ctx.accounts.user_profile.next_stake_index = ctx
             .accounts
@@ -399,89 +397,6 @@ pub mod pocm_vault_mining {
         emit!(StakeWithdrawn {
             owner: ctx.accounts.owner.key(),
             amount: position.amount,
-        });
-        Ok(())
-    }
-
-    pub fn heartbeat<'info>(
-        ctx: Context<'_, '_, 'info, 'info, Heartbeat<'info>>,
-        epoch_index: u64,
-    ) -> Result<()> {
-        let config = &mut ctx.accounts.config;
-        let now = Clock::get()?.unix_timestamp;
-
-        let expected_epoch = epoch_index_for_ts(config, now)?;
-        require!(epoch_index == expected_epoch, ErrorCode::InvalidEpochIndex);
-
-        let epoch_state = &mut ctx.accounts.epoch_state;
-        let is_new_epoch = epoch_state.epoch_index == 0
-            && epoch_state.start_ts == 0
-            && epoch_state.end_ts == 0
-            && epoch_state.total_effective_mp == 0;
-        if is_new_epoch {
-            epoch_state.epoch_index = epoch_index;
-            epoch_state.start_ts = epoch_start_ts(config, epoch_index)?;
-            epoch_state.end_ts = epoch_state
-                .start_ts
-                .checked_add(config.epoch_seconds as i64)
-                .ok_or(ErrorCode::MathOverflow)?;
-            epoch_state.daily_emission = emission_for_epoch(config, epoch_index)?;
-            epoch_state.total_effective_mp = 0;
-            epoch_state.finalized = false;
-            epoch_state.bump = ctx.bumps.epoch_state;
-            config.daily_emission_current = epoch_state.daily_emission;
-            config.last_epoch_ts = epoch_state.start_ts;
-        } else {
-            require!(
-                epoch_state.epoch_index == epoch_index,
-                ErrorCode::InvalidEpochIndex
-            );
-        }
-
-        let mut total_user_mp: u128 = 0;
-        for acc_info in ctx.remaining_accounts.iter() {
-            if acc_info.owner != &crate::ID {
-                continue;
-            }
-            let pos: Account<UserPosition> = Account::try_from(acc_info)?;
-            if pos.owner != ctx.accounts.owner.key() {
-                continue;
-            }
-            if pos.locked_amount == 0 {
-                continue;
-            }
-            if now >= pos.lock_end_ts {
-                continue;
-            }
-            let weighted_amount =
-                compute_weighted_amount(pos.locked_amount, config.th1, config.th2);
-            let user_mp = weighted_amount
-                .checked_mul(pos.time_multiplier_bps as u128)
-                .ok_or(ErrorCode::MathOverflow)?
-                .checked_div(BPS_DENOMINATOR)
-                .ok_or(ErrorCode::MathOverflow)?;
-            total_user_mp = total_user_mp
-                .checked_add(user_mp)
-                .ok_or(ErrorCode::MathOverflow)?;
-        }
-        require!(total_user_mp > 0, ErrorCode::ZeroMiningPower);
-
-        epoch_state.total_effective_mp = epoch_state
-            .total_effective_mp
-            .checked_add(total_user_mp)
-            .ok_or(ErrorCode::MathOverflow)?;
-
-        let user_epoch = &mut ctx.accounts.user_epoch;
-        user_epoch.owner = ctx.accounts.owner.key();
-        user_epoch.epoch_index = epoch_index;
-        user_epoch.user_mp = total_user_mp;
-        user_epoch.claimed = false;
-        user_epoch.bump = ctx.bumps.user_epoch;
-
-        emit!(HeartbeatEvent {
-            owner: ctx.accounts.owner.key(),
-            epoch_index,
-            user_mp: total_user_mp,
         });
         Ok(())
     }
@@ -716,7 +631,7 @@ pub struct Initialize<'info> {
         seeds = [CONFIG_SEED],
         bump
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(
         constraint = mind_mint.decimals == params.mind_decimals,
         constraint = mind_mint.mint_authority == COption::Some(vault_authority.key())
@@ -776,7 +691,7 @@ pub struct CreatePosition<'info> {
         seeds = [CONFIG_SEED],
         bump = config.bumps.config
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(
         init_if_needed,
         payer = owner,
@@ -784,7 +699,7 @@ pub struct CreatePosition<'info> {
         seeds = [PROFILE_SEED, owner.key().as_ref()],
         bump
     )]
-    pub user_profile: Account<'info, UserProfile>,
+    pub user_profile: Box<Account<'info, UserProfile>>,
     #[account(
         init,
         payer = owner,
@@ -792,7 +707,7 @@ pub struct CreatePosition<'info> {
         seeds = [POSITION_SEED, owner.key().as_ref(), position_index.to_le_bytes().as_ref()],
         bump
     )]
-    pub position: Account<'info, UserPosition>,
+    pub position: Box<Account<'info, UserPosition>>,
     pub system_program: Program<'info, System>,
 }
 
@@ -803,19 +718,19 @@ pub struct Deposit<'info> {
         seeds = [CONFIG_SEED],
         bump = config.bumps.config
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(
         mut,
         seeds = [PROFILE_SEED, owner.key().as_ref()],
         bump = user_profile.bump,
         constraint = user_profile.owner == owner.key()
     )]
-    pub user_profile: Account<'info, UserProfile>,
+    pub user_profile: Box<Account<'info, UserProfile>>,
     #[account(
         mut,
         constraint = position.owner == owner.key()
     )]
-    pub position: Account<'info, UserPosition>,
+    pub position: Box<Account<'info, UserPosition>>,
     #[account(seeds = [VAULT_SEED], bump = config.bumps.vault_authority)]
     /// CHECK: PDA derived from VAULT_SEED/bump used as the vault authority
     pub vault_authority: UncheckedAccount<'info>,
@@ -854,14 +769,14 @@ pub struct CreateStake<'info> {
         seeds = [CONFIG_SEED],
         bump = config.bumps.config
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(
         mut,
         seeds = [PROFILE_SEED, owner.key().as_ref()],
         bump = user_profile.bump,
         constraint = user_profile.owner == owner.key()
     )]
-    pub user_profile: Account<'info, UserProfile>,
+    pub user_profile: Box<Account<'info, UserProfile>>,
     #[account(
         init,
         payer = owner,
@@ -869,7 +784,7 @@ pub struct CreateStake<'info> {
         seeds = [STAKING_POSITION_SEED, owner.key().as_ref(), position_index.to_le_bytes().as_ref()],
         bump
     )]
-    pub staking_position: Account<'info, StakingPosition>,
+    pub staking_position: Box<Account<'info, StakingPosition>>,
     #[account(
         seeds = [VAULT_SEED],
         bump = config.bumps.vault_authority
@@ -904,14 +819,14 @@ pub struct ClaimStakeReward<'info> {
         seeds = [CONFIG_SEED],
         bump = config.bumps.config
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(
         mut,
         seeds = [STAKING_POSITION_SEED, owner.key().as_ref(), stake_index.to_le_bytes().as_ref()],
         bump = staking_position.bump,
         constraint = staking_position.owner == owner.key()
     )]
-    pub staking_position: Account<'info, StakingPosition>,
+    pub staking_position: Box<Account<'info, StakingPosition>>,
     #[account(
         seeds = [VAULT_SEED],
         bump = config.bumps.vault_authority
@@ -944,13 +859,13 @@ pub struct WithdrawStake<'info> {
         seeds = [CONFIG_SEED],
         bump = config.bumps.config
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(
         mut,
         close = owner,
         constraint = staking_position.owner == owner.key()
     )]
-    pub staking_position: Account<'info, StakingPosition>,
+    pub staking_position: Box<Account<'info, StakingPosition>>,
     #[account(
         seeds = [VAULT_SEED],
         bump = config.bumps.vault_authority
@@ -975,36 +890,6 @@ pub struct WithdrawStake<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(epoch_index: u64)]
-pub struct Heartbeat<'info> {
-    #[account(mut)]
-    pub owner: Signer<'info>,
-    #[account(
-        mut,
-        seeds = [CONFIG_SEED],
-        bump = config.bumps.config
-    )]
-    pub config: Account<'info, Config>,
-    #[account(
-        init_if_needed,
-        payer = owner,
-        space = 8 + EpochState::INIT_SPACE,
-        seeds = [EPOCH_SEED, epoch_index.to_le_bytes().as_ref()],
-        bump
-    )]
-    pub epoch_state: Account<'info, EpochState>,
-    #[account(
-        init,
-        payer = owner,
-        space = 8 + UserEpoch::INIT_SPACE,
-        seeds = [USER_EPOCH_SEED, owner.key().as_ref(), epoch_index.to_le_bytes().as_ref()],
-        bump
-    )]
-    pub user_epoch: Account<'info, UserEpoch>,
-    pub system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
 pub struct Claim<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
@@ -1013,7 +898,7 @@ pub struct Claim<'info> {
         seeds = [CONFIG_SEED],
         bump = config.bumps.config
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(
         seeds = [VAULT_SEED],
         bump = config.bumps.vault_authority
@@ -1043,7 +928,7 @@ pub struct Withdraw<'info> {
         close = owner,
         constraint = position.owner == owner.key()
     )]
-    pub position: Account<'info, UserPosition>,
+    pub position: Box<Account<'info, UserPosition>>,
     pub system_program: Program<'info, System>,
 }
 
@@ -1056,7 +941,7 @@ pub struct AdminWithdrawTreasuryXnt<'info> {
         bump = config.bumps.config,
         has_one = admin
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(
         seeds = [VAULT_SEED],
         bump = config.bumps.vault_authority
@@ -1093,7 +978,7 @@ pub struct AdminFundStakingXnt<'info> {
         bump = config.bumps.config,
         has_one = admin
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(
         mut,
         constraint = xnt_mint.key() == config.xnt_mint
@@ -1132,7 +1017,7 @@ pub struct AdminUpdateConfig<'info> {
         bump = config.bumps.config,
         has_one = admin
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
 }
 
 #[derive(Accounts)]
@@ -1144,7 +1029,7 @@ pub struct AdminUpdateStakingVault<'info> {
         bump = config.bumps.config,
         has_one = admin
     )]
-    pub config: Account<'info, Config>,
+    pub config: Box<Account<'info, Config>>,
     #[account(
         seeds = [VAULT_SEED],
         bump = config.bumps.vault_authority
@@ -1275,28 +1160,6 @@ pub struct StakingPosition {
     pub bump: u8,
 }
 
-#[account]
-#[derive(InitSpace)]
-pub struct EpochState {
-    pub epoch_index: u64,
-    pub start_ts: i64,
-    pub end_ts: i64,
-    pub total_effective_mp: u128,
-    pub daily_emission: u64,
-    pub finalized: bool,
-    pub bump: u8,
-}
-
-#[account]
-#[derive(InitSpace)]
-pub struct UserEpoch {
-    pub owner: Pubkey,
-    pub epoch_index: u64,
-    pub user_mp: u128,
-    pub claimed: bool,
-    pub bump: u8,
-}
-
 #[event]
 pub struct InitializeEvent {
     pub admin: Pubkey,
@@ -1320,13 +1183,6 @@ pub struct Deposited {
     pub owner: Pubkey,
     pub amount: u64,
     pub lock_end_ts: i64,
-}
-
-#[event]
-pub struct HeartbeatEvent {
-    pub owner: Pubkey,
-    pub epoch_index: u64,
-    pub user_mp: u128,
 }
 
 #[event]
@@ -1396,50 +1252,6 @@ fn epoch_index_for_ts(config: &Config, ts: i64) -> Result<u64> {
     let epoch_seconds = config.epoch_seconds;
     require!(epoch_seconds > 0, ErrorCode::InvalidEpochLength);
     Ok((elapsed as u64) / epoch_seconds)
-}
-
-fn epoch_start_ts(config: &Config, epoch_index: u64) -> Result<i64> {
-    let offset = (epoch_index)
-        .checked_mul(config.epoch_seconds)
-        .ok_or(ErrorCode::MathOverflow)?;
-    let offset_i64 = i64::try_from(offset).map_err(|_| ErrorCode::MathOverflow)?;
-    Ok(config
-        .emission_start_ts
-        .checked_add(offset_i64)
-        .ok_or(ErrorCode::MathOverflow)?)
-}
-
-fn emission_for_epoch(config: &Config, epoch_index: u64) -> Result<u64> {
-    if config.mined_total >= config.mined_cap {
-        return err!(ErrorCode::EmissionDepleted);
-    }
-    let elapsed_seconds = epoch_index
-        .checked_mul(config.epoch_seconds)
-        .ok_or(ErrorCode::MathOverflow)?;
-    let halving_seconds = config
-        .soft_halving_period_days
-        .checked_mul(DEFAULT_EPOCH_SECONDS)
-        .ok_or(ErrorCode::MathOverflow)?;
-    let halving_count = if halving_seconds == 0 {
-        0
-    } else {
-        elapsed_seconds / halving_seconds
-    };
-
-    let mut emission = config.daily_emission_initial as u128;
-    for _ in 0..halving_count {
-        emission = emission
-            .checked_mul((BPS_DENOMINATOR as u64 - config.soft_halving_bps_drop as u64) as u128)
-            .ok_or(ErrorCode::MathOverflow)?
-            .checked_div(BPS_DENOMINATOR)
-            .ok_or(ErrorCode::MathOverflow)?;
-        if emission == 0 {
-            break;
-        }
-    }
-
-    let remaining = (config.mined_cap - config.mined_total) as u128;
-    Ok(emission.min(remaining) as u64)
 }
 
 fn ten_pow(decimals: u8) -> Result<u64> {

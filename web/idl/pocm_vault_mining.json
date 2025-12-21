@@ -495,8 +495,8 @@
         }
       ]
     },
-        {
-          "name": "deposit",
+    {
+      "name": "deposit",
       "discriminator": [
         242,
         35,
@@ -616,14 +616,14 @@
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         }
-          ],
-          "args": [
-            {
-              "name": "amount",
-              "type": "u64"
-            }
-          ]
-        },
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
     {
       "name": "create_stake",
       "discriminator": [
@@ -1049,108 +1049,6 @@
       ]
     },
     {
-      "name": "heartbeat",
-      "discriminator": [
-        202,
-        104,
-        56,
-        6,
-        240,
-        170,
-        63,
-        134
-      ],
-      "accounts": [
-        {
-          "name": "owner",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "config",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  99,
-                  111,
-                  110,
-                  102,
-                  105,
-                  103
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "name": "epoch_state",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  101,
-                  112,
-                  111,
-                  99,
-                  104
-                ]
-              },
-              {
-                "kind": "arg",
-                "path": "epoch_index"
-              }
-            ]
-          }
-        },
-        {
-          "name": "user_epoch",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  117,
-                  115,
-                  101,
-                  114,
-                  95,
-                  101,
-                  112,
-                  111,
-                  99,
-                  104
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "owner"
-              },
-              {
-                "kind": "arg",
-                "path": "epoch_index"
-              }
-            ]
-          }
-        },
-        {
-          "name": "system_program",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": [
-        {
-          "name": "epoch_index",
-          "type": "u64"
-        }
-      ]
-    },
-    {
       "name": "initialize",
       "discriminator": [
         175,
@@ -1296,32 +1194,6 @@
       ]
     },
     {
-      "name": "EpochState",
-      "discriminator": [
-        191,
-        63,
-        139,
-        237,
-        144,
-        12,
-        223,
-        210
-      ]
-    },
-    {
-      "name": "UserEpoch",
-      "discriminator": [
-        245,
-        139,
-        219,
-        238,
-        93,
-        28,
-        126,
-        171
-      ]
-    },
-    {
       "name": "UserProfile",
       "discriminator": [
         32,
@@ -1402,19 +1274,6 @@
       ]
     },
     {
-      "name": "HeartbeatEvent",
-      "discriminator": [
-        253,
-        226,
-        39,
-        233,
-        141,
-        171,
-        229,
-        44
-      ]
-    },
-    {
       "name": "InitializeEvent",
       "discriminator": [
         206,
@@ -1452,8 +1311,7 @@
         219,
         13
       ]
-    }
-    ,
+    },
     {
       "name": "Staked",
       "discriminator": [
@@ -1614,8 +1472,7 @@
       "code": 6023,
       "name": "InvalidFeeAmount",
       "msg": "Invalid fee amount for selected duration"
-    }
-    ,
+    },
     {
       "code": 6024,
       "name": "InvalidStakingDuration",
@@ -1655,55 +1512,55 @@
             "name": "mp_cap_bps_per_wallet",
             "type": "u16"
           },
-        {
-          "name": "update_epoch_seconds",
-          "type": "bool"
-        },
-        {
-          "name": "epoch_seconds",
-          "type": "u64"
-        },
-        {
-          "name": "update_xp_config",
-          "type": "bool"
-        },
-        {
-          "name": "xp_per_7d",
-          "type": "u64"
-        },
-        {
-          "name": "xp_per_14d",
-          "type": "u64"
-        },
-        {
-          "name": "xp_per_30d",
-          "type": "u64"
-        },
-        {
-          "name": "xp_tier_silver",
-          "type": "u64"
-        },
-        {
-          "name": "xp_tier_gold",
-          "type": "u64"
-        },
-        {
-          "name": "xp_tier_diamond",
-          "type": "u64"
-        },
-        {
-          "name": "xp_boost_silver_bps",
-          "type": "u16"
-        },
-        {
-          "name": "xp_boost_gold_bps",
-          "type": "u16"
-        },
-        {
-          "name": "xp_boost_diamond_bps",
-          "type": "u16"
-        }
-      ]
+          {
+            "name": "update_epoch_seconds",
+            "type": "bool"
+          },
+          {
+            "name": "epoch_seconds",
+            "type": "u64"
+          },
+          {
+            "name": "update_xp_config",
+            "type": "bool"
+          },
+          {
+            "name": "xp_per_7d",
+            "type": "u64"
+          },
+          {
+            "name": "xp_per_14d",
+            "type": "u64"
+          },
+          {
+            "name": "xp_per_30d",
+            "type": "u64"
+          },
+          {
+            "name": "xp_tier_silver",
+            "type": "u64"
+          },
+          {
+            "name": "xp_tier_gold",
+            "type": "u64"
+          },
+          {
+            "name": "xp_tier_diamond",
+            "type": "u64"
+          },
+          {
+            "name": "xp_boost_silver_bps",
+            "type": "u16"
+          },
+          {
+            "name": "xp_boost_gold_bps",
+            "type": "u16"
+          },
+          {
+            "name": "xp_boost_diamond_bps",
+            "type": "u16"
+          }
+        ]
       }
     },
     {
@@ -1947,42 +1804,6 @@
       }
     },
     {
-      "name": "EpochState",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "epoch_index",
-            "type": "u64"
-          },
-          {
-            "name": "start_ts",
-            "type": "i64"
-          },
-          {
-            "name": "end_ts",
-            "type": "i64"
-          },
-          {
-            "name": "total_effective_mp",
-            "type": "u128"
-          },
-          {
-            "name": "daily_emission",
-            "type": "u64"
-          },
-          {
-            "name": "finalized",
-            "type": "bool"
-          },
-          {
-            "name": "bump",
-            "type": "u8"
-          }
-        ]
-      }
-    },
-    {
       "name": "HeartbeatEvent",
       "type": {
         "kind": "struct",
@@ -2134,34 +1955,6 @@
           {
             "name": "time_multiplier_bps",
             "type": "u16"
-          }
-        ]
-      }
-    },
-    {
-      "name": "UserEpoch",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "owner",
-            "type": "pubkey"
-          },
-          {
-            "name": "epoch_index",
-            "type": "u64"
-          },
-          {
-            "name": "user_mp",
-            "type": "u128"
-          },
-          {
-            "name": "claimed",
-            "type": "bool"
-          },
-          {
-            "name": "bump",
-            "type": "u8"
           }
         ]
       }
