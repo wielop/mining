@@ -44,12 +44,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           <div
             key={t.id}
             className={[
-              "pointer-events-auto rounded-2xl border px-4 py-3 backdrop-blur-xl",
+              "pointer-events-auto rounded-2xl border px-4 py-3 shadow-[0_0_24px_rgba(34,242,255,0.15)] backdrop-blur-xl",
               t.variant === "success"
-                ? "border-emerald-500/20 bg-emerald-950/40 text-emerald-100"
+                ? "border-emerald-400/30 bg-emerald-950/40 text-emerald-100"
                 : t.variant === "error"
-                  ? "border-rose-500/20 bg-rose-950/40 text-rose-100"
-                  : "border-white/10 bg-zinc-950/40 text-zinc-100",
+                  ? "border-rose-400/30 bg-rose-950/40 text-rose-100"
+                  : "border-cyan-300/20 bg-ink/80 text-zinc-100",
             ].join(" ")}
           >
             <div className="text-sm font-semibold">{t.title}</div>

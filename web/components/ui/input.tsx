@@ -21,7 +21,7 @@ export function Input({
     <div className="relative">
       <input
         className={cn(
-          "h-11 w-full rounded-xl border border-white/10 bg-zinc-950/50 px-3 pr-20 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-cyan-400/50 focus:ring-2 focus:ring-cyan-400/10",
+          "h-11 w-full rounded-2xl border border-cyan-400/10 bg-ink/80 px-3 pr-20 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-500 focus:border-cyan-300/50 focus:ring-2 focus:ring-cyan-300/15",
           mono ? "font-mono" : "",
           disabled ? "cursor-not-allowed opacity-60" : ""
         )}

@@ -17,3 +17,10 @@ cd web
 yarn install
 yarn dev
 ```
+
+## UI redesign notes
+
+- Visual direction: near-black base with cyan/teal glow, thin outlines, and large-number summary cards.
+- Unified dashboard with tabs (Mine XNT / Stake MIND / XP) plus a quickstart wizard for first-time users.
+- Secondary protocol details moved into `details` accordions to reduce clutter.
+- Tailwind additions: custom `night/ink/neon/tide/pulse` colors, glow shadows, and Space Grotesk + JetBrains Mono fonts (see `tailwind.config.ts` and `app/layout.tsx`).

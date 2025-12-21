@@ -1,8 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { useAnchorWallet, useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { BN } from "@coral-xyz/anchor";
 import { SystemProgram, Transaction } from "@solana/web3.js";
@@ -19,8 +17,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { NetworkBadge } from "@/components/shared/NetworkBadge";
 import { CopyButton } from "@/components/shared/CopyButton";
+import { TopBar } from "@/components/shared/TopBar";
 import { useToast } from "@/components/shared/ToastProvider";
 import { getProgram } from "@/lib/anchor";
 import { deriveConfigPda, deriveVaultPda, fetchClockUnixTs, fetchConfig, getCurrentEpochFrom } from "@/lib/solana";
@@ -380,37 +378,18 @@ export function AdminDashboard() {
 
   return (
     <div className="min-h-dvh">
-      <header className="sticky top-0 z-40 border-b border-white/5 bg-zinc-950/40 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-cyan-400/30 to-fuchsia-500/20 ring-1 ring-white/10" />
-            <div>
-              <div className="text-sm font-semibold leading-tight">Admin Console</div>
-              <div className="text-[11px] text-zinc-400">Update config thresholds + limits</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link className="text-xs text-zinc-300 hover:text-white" href="/">
-              Public
-            </Link>
-            <WalletMultiButton />
-          </div>
-        </div>
-      </header>
+      <TopBar title="Admin Console" subtitle="Config + treasury controls" link={{ href: "/", label: "Public" }} />
 
-      <main className="mx-auto grid max-w-6xl gap-4 px-4 pb-10 pt-6">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <main className="mx-auto grid max-w-6xl gap-5 px-4 pb-10 pt-8">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Protocol Config</h1>
+            <h1 className="text-3xl font-semibold text-white">Protocol Config</h1>
             <div className="mt-2 text-sm text-zinc-400">Admin-only. All changes are on-chain and irreversible.</div>
-            <div className="mt-3">
-              <NetworkBadge />
-            </div>
           </div>
           {publicKey ? (
             <div className="flex items-center gap-2">
               <Badge variant={isAdmin ? "success" : "warning"}>{isAdmin ? "admin connected" : "not admin"}</Badge>
-              <Badge variant="muted">Wallet: {shortPk(publicKey.toBase58(), 6)}</Badge>
+              <Badge variant="muted">{shortPk(publicKey.toBase58(), 6)}</Badge>
               <CopyButton text={publicKey.toBase58()} />
             </div>
           ) : (
@@ -501,19 +480,19 @@ export function AdminDashboard() {
               <CardHeader title="Edit + submit" description="Changes require the admin wallet signature." />
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
-                  <div className="text-xs text-zinc-400">TH1 (base units)</div>
+                  <div className="text-xs text-zinc-400" title="Tier threshold 1 in base units">TH1 (base units)</div>
                   <Input value={th1} onChange={setTh1} placeholder="u64" mono />
                 </div>
                 <div className="grid gap-2">
-                  <div className="text-xs text-zinc-400">TH2 (base units)</div>
+                  <div className="text-xs text-zinc-400" title="Tier threshold 2 in base units">TH2 (base units)</div>
                   <Input value={th2} onChange={setTh2} placeholder="u64" mono />
                 </div>
                 <div className="grid gap-2">
-                  <div className="text-xs text-zinc-400">mp_cap_bps_per_wallet</div>
+                  <div className="text-xs text-zinc-400" title="Max effective MP cap per wallet in bps">mp_cap_bps_per_wallet</div>
                   <Input value={mpCapBps} onChange={setMpCapBps} placeholder="0-10000" mono />
                 </div>
                 <div className="grid gap-2">
-                  <div className="text-xs text-zinc-400">epoch_seconds</div>
+                  <div className="text-xs text-zinc-400" title="Epoch length in seconds">epoch_seconds</div>
                   <Input
                     value={epochSeconds}
                     onChange={setEpochSeconds}
@@ -550,43 +529,43 @@ export function AdminDashboard() {
                 </div>
                 <div className="mt-3 grid gap-3 sm:grid-cols-3">
                   <div className="grid gap-2">
-                    <div className="text-xs text-zinc-400">XP per 7d</div>
+                    <div className="text-xs text-zinc-400" title="XP granted for a 7 day miner">XP per 7d</div>
                     <Input value={xpPer7d} onChange={setXpPer7d} placeholder="u64" mono disabled={!updateXpConfig} />
                   </div>
                   <div className="grid gap-2">
-                    <div className="text-xs text-zinc-400">XP per 14d</div>
+                    <div className="text-xs text-zinc-400" title="XP granted for a 14 day miner">XP per 14d</div>
                     <Input value={xpPer14d} onChange={setXpPer14d} placeholder="u64" mono disabled={!updateXpConfig} />
                   </div>
                   <div className="grid gap-2">
-                    <div className="text-xs text-zinc-400">XP per 30d</div>
+                    <div className="text-xs text-zinc-400" title="XP granted for a 30 day miner">XP per 30d</div>
                     <Input value={xpPer30d} onChange={setXpPer30d} placeholder="u64" mono disabled={!updateXpConfig} />
                   </div>
                 </div>
                 <div className="mt-3 grid gap-3 sm:grid-cols-3">
                   <div className="grid gap-2">
-                    <div className="text-xs text-zinc-400">Silver tier XP</div>
+                    <div className="text-xs text-zinc-400" title="XP threshold for Silver tier">Silver tier XP</div>
                     <Input value={xpTierSilver} onChange={setXpTierSilver} placeholder="u64" mono disabled={!updateXpConfig} />
                   </div>
                   <div className="grid gap-2">
-                    <div className="text-xs text-zinc-400">Gold tier XP</div>
+                    <div className="text-xs text-zinc-400" title="XP threshold for Gold tier">Gold tier XP</div>
                     <Input value={xpTierGold} onChange={setXpTierGold} placeholder="u64" mono disabled={!updateXpConfig} />
                   </div>
                   <div className="grid gap-2">
-                    <div className="text-xs text-zinc-400">Diamond tier XP</div>
+                    <div className="text-xs text-zinc-400" title="XP threshold for Diamond tier">Diamond tier XP</div>
                     <Input value={xpTierDiamond} onChange={setXpTierDiamond} placeholder="u64" mono disabled={!updateXpConfig} />
                   </div>
                 </div>
                 <div className="mt-3 grid gap-3 sm:grid-cols-3">
                   <div className="grid gap-2">
-                    <div className="text-xs text-zinc-400">Silver boost (bps)</div>
+                    <div className="text-xs text-zinc-400" title="Stake boost for Silver tier in bps">Silver boost (bps)</div>
                     <Input value={xpBoostSilverBps} onChange={setXpBoostSilverBps} placeholder="bps" mono disabled={!updateXpConfig} />
                   </div>
                   <div className="grid gap-2">
-                    <div className="text-xs text-zinc-400">Gold boost (bps)</div>
+                    <div className="text-xs text-zinc-400" title="Stake boost for Gold tier in bps">Gold boost (bps)</div>
                     <Input value={xpBoostGoldBps} onChange={setXpBoostGoldBps} placeholder="bps" mono disabled={!updateXpConfig} />
                   </div>
                   <div className="grid gap-2">
-                    <div className="text-xs text-zinc-400">Diamond boost (bps)</div>
+                    <div className="text-xs text-zinc-400" title="Stake boost for Diamond tier in bps">Diamond boost (bps)</div>
                     <Input value={xpBoostDiamondBps} onChange={setXpBoostDiamondBps} placeholder="bps" mono disabled={!updateXpConfig} />
                   </div>
                 </div>

@@ -23,13 +23,13 @@ export function Dialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
       <button
         type="button"
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
         onClick={() => onOpenChange(false)}
         aria-label="Close dialog"
       />
       <div
         className={cn(
-          "relative w-full max-w-lg overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/60 shadow-2xl backdrop-blur-xl"
+          "relative w-full max-w-lg overflow-hidden rounded-3xl border border-cyan-300/20 bg-ink/90 shadow-[0_0_40px_rgba(34,242,255,0.15)] backdrop-blur-xl"
         )}
       >
         <div className="p-4">
@@ -49,4 +49,3 @@ export function Dialog({
     </div>
   );
 }
-

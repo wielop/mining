@@ -12,11 +12,11 @@ export function Card({
   return (
     <section
       className={cn(
-        "relative overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/30 p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.04)] backdrop-blur-xl",
+        "relative overflow-hidden rounded-3xl border border-cyan-400/10 bg-ink/70 p-5 shadow-[0_0_0_1px_rgba(34,242,255,0.08)] backdrop-blur-xl transition hover:border-cyan-300/30 hover:shadow-[0_0_32px_rgba(34,242,255,0.18)]",
         className
       )}
     >
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/5 to-transparent" />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/5 via-transparent to-transparent" />
       <div className="relative">{children}</div>
     </section>
   );
@@ -41,4 +41,3 @@ export function CardHeader({
     </div>
   );
 }
-

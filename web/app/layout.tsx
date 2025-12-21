@@ -1,8 +1,19 @@
 import "./globals.css";
 import "@solana/wallet-adapter-react-ui/styles.css";
 import type { Metadata } from "next";
+import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { WalletProviders } from "@/components/WalletProviders";
 import { ToastProvider } from "@/components/shared/ToastProvider";
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-space-grotesk",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains-mono",
+});
 
 export const metadata: Metadata = {
   title: "PoCM Mining",
@@ -16,7 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>
+      <body className={`${spaceGrotesk.variable} ${jetbrainsMono.variable} font-sans`}>
         <WalletProviders>
           <ToastProvider>{children}</ToastProvider>
         </WalletProviders>

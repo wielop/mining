@@ -12,15 +12,18 @@ import {
   createSyncNativeInstruction,
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
-import Link from "next/link";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
-import { NetworkBadge } from "@/components/shared/NetworkBadge";
-import { CopyButton } from "@/components/shared/CopyButton";
+import { TopBar } from "@/components/shared/TopBar";
+import { Tabs } from "@/components/ui/tabs";
+import { SummaryGrid } from "@/components/dashboard/SummaryGrid";
+import { ActionWizard } from "@/components/dashboard/ActionWizard";
+import { MineSection } from "@/components/dashboard/MineSection";
+import { StakeSection } from "@/components/dashboard/StakeSection";
+import { XPSection } from "@/components/dashboard/XPSection";
+import { TransactionStatus } from "@/components/dashboard/TransactionStatus";
+import { DashboardProvider, BusyAction, MiningPlanOption } from "@/components/dashboard/DashboardContext";
 import { useToast } from "@/components/shared/ToastProvider";
 import { getProgram } from "@/lib/anchor";
 import {
@@ -87,22 +90,7 @@ function computeEstimatedReward(args: {
   return reward < remaining ? reward : remaining;
 }
 
-type BusyAction =
-  | "buy"
-  | "heartbeat"
-  | "claim"
-  | "claim-all"
-  | "close"
-  | "stake"
-  | `claim-stake-${string}`
-  | `withdraw-stake-${string}`;
-
-const STAKING_COOLDOWN_SECONDS = 7 * 86_400;
-const STAKE_DURATIONS: Array<7 | 14 | 30 | 60> = [7, 14, 30, 60];
 const XP_TIER_LABELS = ["Bronze", "Silver", "Gold", "Diamond"] as const;
-const XP_BADGE_VARIANTS: Array<"muted" | "warning" | "success"> = ["muted", "warning", "success", "success"];
-
-type MiningPlanOption = { d: 7 | 14 | 28; mult: string; price: string; xp: string };
 
 export function PublicDashboard() {
   const { connection } = useConnection();
@@ -136,6 +124,7 @@ export function PublicDashboard() {
   const [durationDays, setDurationDays] = useState<7 | 14 | 28>(14);
   const [stakeDurationDays, setStakeDurationDays] = useState<7 | 14 | 30 | 60>(30);
   const [stakeAmountUi, setStakeAmountUi] = useState("");
+  const [stakeDialogOpen, setStakeDialogOpen] = useState(false);
   const [busy, setBusy] = useState<BusyAction | null>(null);
   const [loading, setLoading] = useState(false);
   const [lastSig, setLastSig] = useState<string | null>(null);
@@ -706,6 +695,7 @@ const onStake = async () => {
       return await signAndSend(tx);
     });
     setStakeAmountUi("");
+    setStakeDialogOpen(false);
   } finally {
     setBusy(null);
   }
@@ -914,803 +904,191 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
     setStakeAmountUi(formatTokenAmount(mindBalanceBase, config.mindDecimals, config.mindDecimals));
   };
 
-  const xpTierVariant = xpStats
-    ? XP_BADGE_VARIANTS[Math.min(xpStats.tier, XP_BADGE_VARIANTS.length - 1)]
-    : "muted";
+  const [activeTab, setActiveTab] = useState<"mine" | "stake" | "xp">("mine");
+
+  const dashboardValue = useMemo(
+    () => ({
+      publicKey,
+      config,
+      nowTs,
+      currentEpoch,
+      nextEpochCountdown,
+      positions,
+      activePositions,
+      anyActive,
+      stakingPositions,
+      durationDays,
+      setDurationDays,
+      planOptions,
+      emissionNotStarted,
+      heartbeatDone,
+      claimed,
+      onDeposit,
+      onHeartbeat,
+      onClaim,
+      onClaimAll,
+      onClosePosition,
+      onStake,
+      onClaimStake,
+      onWithdrawStake,
+      busy,
+      loading,
+      error,
+      lastSig,
+      refresh,
+      xntBalanceUi,
+      mindBalanceUi,
+      mindBalanceBase,
+      stakingVaultXntBalanceUi,
+      stakingVaultXntBalanceBase,
+      stakingVaultMindBalanceUi,
+      stakeAmountUi,
+      setStakeAmountUi,
+      stakeDurationDays,
+      setStakeDurationDays,
+      stakeEstimate,
+      handleStakeMax,
+      stakeDialogOpen,
+      setStakeDialogOpen,
+      estimatedRewardBase,
+      userProfile,
+      xpStats,
+      rewardPoolSeries,
+      unclaimedEpochs,
+    }),
+    [
+      activePositions,
+      anyActive,
+      busy,
+      claimed,
+      config,
+      currentEpoch,
+      durationDays,
+      emissionNotStarted,
+      estimatedRewardBase,
+      error,
+      handleStakeMax,
+      heartbeatDone,
+      lastSig,
+      loading,
+      mindBalanceBase,
+      mindBalanceUi,
+      nextEpochCountdown,
+      nowTs,
+      onClaim,
+      onClaimAll,
+      onClaimStake,
+      onClosePosition,
+      onDeposit,
+      onHeartbeat,
+      onStake,
+      onWithdrawStake,
+      planOptions,
+      positions,
+      publicKey,
+      refresh,
+      rewardPoolSeries,
+      stakeAmountUi,
+      stakeDialogOpen,
+      stakeDurationDays,
+      stakeEstimate,
+      stakingPositions,
+      stakingVaultMindBalanceUi,
+      stakingVaultXntBalanceBase,
+      stakingVaultXntBalanceUi,
+      unclaimedEpochs,
+      userProfile,
+      xpStats,
+      xntBalanceUi,
+      setDurationDays,
+      setStakeAmountUi,
+      setStakeDialogOpen,
+      setStakeDurationDays,
+    ]
+  );
 
   return (
-    <div className="min-h-dvh">
-      <header className="sticky top-0 z-40 border-b border-white/5 bg-zinc-950/40 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-cyan-400/30 to-fuchsia-500/20 ring-1 ring-white/10" />
+    <DashboardProvider value={dashboardValue}>
+      <div className="min-h-dvh">
+        <TopBar
+          title="X1 Mining Vault"
+          subtitle="Mine XNT • Stake MIND"
+          link={{ href: "/admin", label: "Admin" }}
+        />
+
+        <main className="mx-auto flex max-w-6xl flex-col gap-6 px-4 pb-24 pt-8">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <div className="text-sm font-semibold leading-tight">PoCM Vault Mining</div>
-              <div className="text-[11px] text-zinc-400">XNT mining + XP-powered staking rewards</div>
+              <h1 className="text-3xl font-semibold text-white">Mining + Staking</h1>
+              <div className="mt-2 text-sm text-zinc-400">
+                Unified dashboard for mining and staking.
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link className="text-xs text-zinc-300 hover:text-white" href="/admin">
-              Admin
-            </Link>
-            <WalletMultiButton />
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto grid max-w-6xl gap-4 px-4 pb-24 pt-6">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Mining & staking{" "}
-              <span className="bg-gradient-to-r from-cyan-200 to-fuchsia-200 bg-clip-text text-transparent">
-                Testnet
-              </span>
-            </h1>
-            <div className="mt-2 text-sm text-zinc-400">
-              Zero-backend dashboard. All state is pulled directly from-chain.
-            </div>
-            <div className="mt-3">
-              <NetworkBadge />
-            </div>
-          </div>
-          {publicKey ? (
-            <div className="flex items-center gap-2">
-              <Badge variant="muted">Wallet: {shortPk(publicKey.toBase58(), 6)}</Badge>
-              <CopyButton text={publicKey.toBase58()} label="Copy" />
-            </div>
-          ) : (
-            <Badge variant="warning">Connect wallet to start</Badge>
-          )}
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-12">
-          <div className="md:col-span-7">
-            <Card>
-              <CardHeader
-                title="Status overview"
-                description="Live epoch, emission & miner metadata."
-                right={
-                  <Button variant="secondary" onClick={() => void refresh()} disabled={busy !== null || loading}>
-                    {loading ? "Refreshing…" : "Refresh"}
-                  </Button>
-                }
-              />
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <div className="text-xs text-zinc-400">Current epoch</div>
-                  <div className="mt-1 font-mono text-lg">
-                    {currentEpoch == null ? <Skeleton className="h-6 w-24" /> : currentEpoch}
-                  </div>
-                  {nextEpochCountdown ? (
-                    <div className="mt-2 text-xs text-zinc-400">
-                      {nextEpochCountdown.label}{" "}
-                      <span className="font-mono text-zinc-200">
-                        {formatEpochCountdown(nextEpochCountdown.seconds)}
-                      </span>
-                    </div>
-                  ) : null}
-                </div>
-                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <div className="text-xs text-zinc-400">On-chain clock</div>
-                  <div className="mt-1 font-mono text-sm">{nowTs == null ? "(loading)" : formatUnixTs(nowTs)}</div>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <div className="text-xs text-zinc-400">Emission</div>
-                  {config ? (
-                    <div className="mt-1 text-sm text-zinc-200">
-                      <div className="font-mono">
-                        {formatTokenAmount(BigInt(config.minedTotal.toString()), config.mindDecimals, 2)} /{" "}
-                        {formatTokenAmount(BigInt(config.minedCap.toString()), config.mindDecimals, 2)} MIND
-                      </div>
-                      <div className="mt-1 text-xs text-zinc-400">
-                        start: {formatUnixTs(config.emissionStartTs.toNumber())}
-                      </div>
-                    </div>
-                  ) : (
-                    <Skeleton className="h-10 w-full" />
-                  )}
-                </div>
-                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <div className="text-xs text-zinc-400">Position status</div>
-                  <div className="mt-1 text-sm text-zinc-200">
-                    {!publicKey ? (
-                      <Badge variant="muted">not connected</Badge>
-                    ) : positions.length === 0 ? (
-                      <Badge variant="warning">no miners yet</Badge>
-                    ) : anyActive ? (
-                      <Badge variant="success">active miners</Badge>
-                    ) : (
-                      <Badge variant="muted">no active lock</Badge>
-                    )}
-                  </div>
-                  <div className="mt-2 text-xs text-zinc-500">Miners: {positions.length}</div>
-                </div>
-              </div>
-              {xpStats && (
-                <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <div className="text-sm font-semibold text-zinc-100">XP tier</div>
-                    <Badge variant={xpTierVariant}>
-                      {xpStats.tierName} • +{formatBps(xpStats.boostBps)} boost
-                    </Badge>
-                    <div className="text-xs text-zinc-400">Total XP: {userProfile?.miningXp.toString()}</div>
-                  </div>
-                  <div className="mt-3 h-1.5 w-full rounded-full bg-white/10">
-                    <div
-                      className="h-1.5 rounded-full bg-gradient-to-r from-cyan-400 to-fuchsia-500 transition-all"
-                      style={{ width: `${xpStats.progress}%` }}
-                    />
-                  </div>
-                  <div className="mt-2 text-xs text-zinc-400">
-                    {xpStats.nextTierName
-                      ? `${xpStats.remaining.toString()} XP to ${xpStats.nextTierName}`
-                      : "Max tier unlocked"}
-                  </div>
-                </div>
-              )}
-              {emissionNotStarted && config ? (
-                <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-950/20 p-3 text-sm text-amber-100">
-                  Mining has not yet started. Emission start:{" "}
-                  <span className="font-mono">{formatUnixTs(config.emissionStartTs.toNumber())}</span>
-                </div>
-              ) : null}
-            </Card>
-          </div>
-
-          <div className="md:col-span-5">
-            <Card>
-              <CardHeader
-                title="Position"
-                description={
-                  anyActive
-                    ? "Active miners require epoch heartbeats + claims."
-                    : "Buy miners and stack XP for staking boosts."
-                }
-                right={
-                  config ? (
-                    <Badge variant="muted">{config.xntMint.equals(NATIVE_MINT) ? "XNT = wSOL" : "XNT = SPL"}</Badge>
-                  ) : null
-                }
-              />
-
-              {!publicKey ? (
-                <div className="mt-4 text-sm text-zinc-400">Connect wallet to buy miners.</div>
-              ) : (
-                <div className="mt-4 grid gap-4">
-                  <div className="grid gap-3">
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs text-zinc-400">XNT balance</div>
-                      <div className="font-mono text-xs text-zinc-300">
-                        {xntBalanceUi ?? "(loading)"}
-                      </div>
-                    </div>
-                    <div className="text-xs text-zinc-400">Choose a plan</div>
-                    <div className="grid grid-cols-3 gap-2">
-                      {planOptions.map((opt) => (
-                        <button
-                          key={opt.d}
-                          type="button"
-                          onClick={() => setDurationDays(opt.d)}
-                          className={[
-                            "rounded-2xl border px-3 py-3 text-left transition",
-                            durationDays === opt.d
-                              ? "border-cyan-400/40 bg-cyan-500/10"
-                              : "border-white/10 bg-white/5 hover:bg-white/10",
-                          ].join(" ")}
-                        >
-                          <div className="text-sm font-semibold">{opt.d}d</div>
-                          <div className="mt-1 text-xs text-zinc-400">{opt.mult}</div>
-                          <div className="mt-1 text-xs text-emerald-300">+{opt.xp} XP</div>
-                          <div className="mt-2 text-xs text-zinc-200">{opt.price} XNT</div>
-                        </button>
-                      ))}
-                    </div>
-                    <div className="rounded-xl border border-amber-500/20 bg-amber-950/20 p-3 text-xs text-amber-100">
-                      Deposit is non-refundable. You can open multiple miners.
-                    </div>
-                    {publicKey && heartbeatDone && nextEpochCountdown ? (
-                      <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-zinc-300">
-                        Already heartbeated for this epoch. A new miner begins earning{" "}
-                        <span className="font-mono">
-                          {nextEpochCountdown.label} {formatEpochCountdown(nextEpochCountdown.seconds)}
-                        </span>
-                        .
-                      </div>
-                    ) : null}
-                    <Button
-                      size="lg"
-                      onClick={() => void onDeposit().catch(() => null)}
-                      disabled={!config || busy !== null || emissionNotStarted}
-                    >
-                      {busy === "buy" ? "Submitting…" : "Buy miner"}
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </Card>
-          </div>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-12">
-          <div className="md:col-span-7">
-            <Card>
-              <CardHeader
-                title="XP & boosts"
-                description="Every miner adds XP. XP unlocks better staking multipliers."
-              />
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <div className="text-xs text-zinc-400">Progress</div>
-                  <div className="mt-1 text-sm text-zinc-200">
-                    {userProfile ? `${userProfile.miningXp.toString()} XP collected` : (
-                      <Skeleton className="h-5 w-24" />
-                    )}
-                  </div>
-                  <div className="mt-3 h-1.5 w-full rounded-full bg-white/10">
-                    <div
-                      className="h-1.5 rounded-full bg-gradient-to-r from-cyan-400 to-fuchsia-500"
-                      style={{ width: `${xpStats?.progress ?? 0}%` }}
-                    />
-                  </div>
-                  <div className="mt-2 text-xs text-zinc-400">
-                    XP boosts staking by up to +{formatBps(xpStats?.boostBps ?? 0)}.
-                  </div>
-                  <div className="mt-3 text-xs text-zinc-500">
-                    {xpStats?.nextTierName
-                      ? `${xpStats.remaining.toString()} XP to ${xpStats.nextTierName}`
-                      : "At max tier"}
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <div className="text-xs text-zinc-400">Tier thresholds</div>
-                  <div className="mt-2 grid gap-2">
-                    <div className="flex items-center justify-between text-xs text-zinc-300">
-                      <span>Silver</span>
-                      <span>
-                        {config?.xpTierSilver.toString() ?? "-"} XP • +{formatBps(config?.xpBoostSilverBps ?? 0)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-zinc-300">
-                      <span>Gold</span>
-                      <span>
-                        {config?.xpTierGold.toString() ?? "-"} XP • +{formatBps(config?.xpBoostGoldBps ?? 0)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs text-zinc-300">
-                      <span>Diamond</span>
-                      <span>
-                        {config?.xpTierDiamond.toString() ?? "-"} XP • +{formatBps(config?.xpBoostDiamondBps ?? 0)}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="mt-3 text-xs text-zinc-500">
-                    Total XP minted: {config ? config.totalXp.toString() : "-"}.
-                  </div>
-                </div>
-              </div>
-              <div className="mt-4 text-xs text-zinc-500">
-                25% of every miner purchase is reserved for the staking vault. XP only affects staking boosts.
-              </div>
-            </Card>
-          </div>
-
-          <div className="md:col-span-5">
-            <Card>
-              <CardHeader
-                title="Staking vault"
-                description="Rewards pool for MIND stakes (25% of deposits + admin top-ups)."
-              />
-              <div className="mt-3 grid gap-3">
-                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <div className="text-xs text-zinc-400">XNT liquidity</div>
-                  <div className="mt-1 font-mono text-sm">{stakingVaultXntBalanceUi ?? "loading..."}</div>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <div className="text-xs text-zinc-400">Reward pool (24h)</div>
-                  {rewardPoolSeries ? (
-                    <svg viewBox="0 0 100 100" className="mt-2 h-16 w-full">
-                      <defs>
-                        <linearGradient id="rewardPoolFill" x1="0" x2="0" y1="0" y2="1">
-                          <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.35" />
-                          <stop offset="100%" stopColor="#a855f7" stopOpacity="0.05" />
-                        </linearGradient>
-                      </defs>
-                      <polyline
-                        fill="none"
-                        stroke="#22d3ee"
-                        strokeWidth="2"
-                        points={rewardPoolSeries.points}
-                      />
-                      <polyline
-                        fill="url(#rewardPoolFill)"
-                        stroke="none"
-                        points={`0,100 ${rewardPoolSeries.points} 100,100`}
-                      />
-                    </svg>
-                  ) : (
-                    <div className="mt-2 text-xs text-zinc-500">Zbieram dane…</div>
-                  )}
-                  <div className="mt-2 text-[11px] text-zinc-500">
-                    {rewardPoolSeries && config
-                      ? `${formatTokenAmount(rewardPoolSeries.min, config.xntDecimals, 6)} → ${formatTokenAmount(
-                          rewardPoolSeries.max,
-                          config.xntDecimals,
-                          6
-                        )} XNT`
-                      : "Brak historii"}
-                  </div>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <div className="text-xs text-zinc-400">Staked MIND</div>
-                  <div className="mt-1 font-mono text-sm">
-                    {config
-                      ? stakingVaultMindBalanceUi ?? "-"
-                      : "-"}
-                  </div>
-                  <div className="mt-1 text-[11px] text-zinc-500">
-                    Weighted total:{" "}
-                    {config
-                      ? formatTokenAmount(BigInt(config.totalStakedMind.toString()), config.mindDecimals, 4)
-                      : "-"}
-                  </div>
-                </div>
-                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <div className="text-xs text-zinc-400">Vault MIND balance</div>
-                  <div className="mt-1 font-mono text-sm">{stakingVaultMindBalanceUi ?? "loading..."}</div>
-                </div>
-              </div>
-              <div className="mt-5 border-t border-white/5 pt-4">
-                <div className="text-xs text-zinc-400">Stake MIND</div>
-                <div className="mt-2 grid gap-2">
-                  <Input
-                    value={stakeAmountUi}
-                    onChange={setStakeAmountUi}
-                    placeholder="Amount (MIND)"
-                    disabled={busy !== null}
-                    right={
-                      <button
-                        type="button"
-                        className="rounded-full border border-white/10 px-2 py-1 text-[11px] text-zinc-200 hover:border-cyan-400/40"
-                        onClick={handleStakeMax}
-                        disabled={!config || mindBalanceBase === 0n}
-                      >
-                        Max
-                      </button>
-                    }
-                  />
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {STAKE_DURATIONS.map((days) => (
-                    <button
-                      key={days}
-                      type="button"
-                      onClick={() => setStakeDurationDays(days)}
-                      className={[
-                        "rounded-2xl border px-3 py-2 text-sm transition",
-                        stakeDurationDays === days
-                          ? "border-cyan-400/40 bg-cyan-500/10"
-                          : "border-white/10 bg-white/5 hover:bg-white/10",
-                      ].join(" ")}
-                    >
-                      {days}d
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-2 text-[11px] text-zinc-500">
-                  Multipliers: 7d 1.0x • 14d 1.1x • 30d 1.25x • 60d 1.5x
-                </div>
-                <div className="mt-4">
-                  <Button
-                    size="lg"
-                    onClick={() => void onStake().catch(() => null)}
-                    disabled={!config || busy !== null || !stakeAmountUi}
-                  >
-                    {busy === "stake" ? "Submitting…" : "Stake MIND"}
-                  </Button>
-                </div>
-                <div className="mt-2 text-xs text-zinc-400">
-                  Pool share (no badge):{" "}
-                  <span className="font-mono text-zinc-200">
-                    {config && stakeEstimate?.base != null
-                      ? `${formatTokenAmount(stakeEstimate.base, config.xntDecimals, 6)} XNT`
-                      : "-"}
-                  </span>
-                </div>
-                <div className="mt-1 text-xs text-zinc-400">
-                  Pool share (with badge):{" "}
-                  <span className="font-mono text-zinc-200">
-                    {config && stakeEstimate?.boosted != null
-                      ? `${formatTokenAmount(stakeEstimate.boosted, config.xntDecimals, 6)} XNT`
-                      : "-"}
-                  </span>
-                </div>
-                <div className="mt-2 text-xs text-zinc-500">
-                  Claim once every 7 days. Withdraw after the lock expires.
-                </div>
-                <div className="mt-1 text-[11px] text-zinc-500">
-                  Estimate uses current vault XNT and total staked MIND. Actual reward depends on pool at claim time.
-                </div>
-              </div>
-            </Card>
-          </div>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-12">
-          <div className="md:col-span-7">
-            <Card>
-              <CardHeader title="Epoch actions" description="Needed when you have an active lock." />
-              {nextEpochCountdown && (
-                <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-zinc-300">
-                  {nextEpochCountdown.label}{" "}
-                  <span className="font-mono text-zinc-100">{formatEpochCountdown(nextEpochCountdown.seconds)}</span>
-                </div>
-              )}
-              {!publicKey ? (
-                <div className="mt-4 text-sm text-zinc-400">Connect wallet to heartbeat & claim.</div>
-              ) : (
-                <>
-                  {!anyActive ? (
-                    <div className="mt-4 text-sm text-zinc-400">
-                      No active miners. Heartbeat and claim require an active mining position.
-                    </div>
-                  ) : null}
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="text-sm font-semibold">Heartbeat</div>
-                        <div className="mt-1 text-xs text-zinc-400">Record mining power this epoch.</div>
-                      </div>
-                      <Badge variant={heartbeatDone ? "success" : "warning"}>
-                        {heartbeatDone ? "done" : "required"}
-                      </Badge>
-                    </div>
-                    <div className="mt-4">
-                      <Button
-                        onClick={() => void onHeartbeat().catch(() => null)}
-                        disabled={busy !== null || heartbeatDone || currentEpoch == null || !anyActive}
-                        title={
-                          !anyActive
-                            ? "No active mining position"
-                            : heartbeatDone
-                            ? nextEpochCountdown
-                              ? `Already recorded. ${formatEpochCountdown(nextEpochCountdown.seconds)} until next epoch.`
-                              : "Already recorded"
-                            : currentEpoch == null
-                              ? "Epoch unavailable"
-                              : undefined
-                        }
-                      >
-                        {busy === "heartbeat" ? "Submitting…" : "Heartbeat current epoch"}
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="text-sm font-semibold">Claim</div>
-                        <div className="mt-1 text-xs text-zinc-400">Mint MIND rewards.</div>
-                      </div>
-                      <Badge variant={claimed ? "muted" : heartbeatDone ? "success" : "warning"}>
-                        {claimed ? "claimed" : heartbeatDone ? "claimable" : "needs heartbeat"}
-                      </Badge>
-                    </div>
-                    <div className="mt-3 text-xs text-zinc-400">
-                      Est. reward:{" "}
-                      <span className="font-mono text-zinc-200">
-                        {config && estimatedRewardBase != null && anyActive
-                          ? `${formatTokenAmount(estimatedRewardBase, config.mindDecimals, 4)} MIND`
-                          : "-"}
-                      </span>
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Button
-                        onClick={() => void onClaim().catch(() => null)}
-                        disabled={busy !== null || !heartbeatDone || claimed || !anyActive}
-                        title={
-                          !anyActive
-                            ? "No active mining position"
-                            : !heartbeatDone
-                              ? "Heartbeat required"
-                              : claimed
-                                ? "Already claimed"
-                                : undefined
-                        }
-                      >
-                        {busy === "claim" ? "Submitting…" : "Claim current epoch"}
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        onClick={() => void onClaimAll().catch(() => null)}
-                        disabled={busy !== null || unclaimedEpochs.length === 0}
-                        title={unclaimedEpochs.length === 0 ? "No unclaimed epochs" : undefined}
-                      >
-                        {busy === "claim-all"
-                          ? "Submitting…"
-                          : `Claim all (${unclaimedEpochs.length})`}
-                      </Button>
-                    </div>
-                    <div className="mt-3 text-xs text-zinc-400">
-                      MIND balance: <span className="font-mono text-zinc-200">{mindBalanceUi ?? "(loading)"}</span>
-                    </div>
-                  </div>
-                </div>
-                </>
-              )}
-            </Card>
-          </div>
-          <div className="md:col-span-5">
-            <Card>
-              <CardHeader title="Your miners" description="Each purchase is a standalone position." />
-              {!publicKey ? (
-                <div className="mt-4 text-sm text-zinc-400">Connect wallet to explore miners.</div>
-              ) : positions.length === 0 ? (
-                <div className="mt-4 text-sm text-zinc-400">No miners yet.</div>
-              ) : (
-                <div className="mt-4 grid gap-2">
-                  {positions.slice(0, 5).map((p) => {
-                    const active = nowTs != null && p.data.lockedAmount > 0n && nowTs < p.data.lockEndTs;
-                    const remaining = nowTs != null ? Math.max(0, p.data.lockEndTs - nowTs) : null;
-                    const ended = nowTs != null && p.data.lockedAmount > 0n && nowTs >= p.data.lockEndTs;
-                    const inactive = p.data.lockedAmount === 0n;
-                    return (
-                      <div key={p.pubkey} className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <div className="text-xs text-zinc-400">Position</div>
-                            <div className="mt-1 font-mono text-xs text-zinc-200">{shortPk(p.pubkey, 8)}</div>
-                          </div>
-                          <Badge variant={active ? "success" : inactive ? "warning" : "muted"}>
-                            {active ? "active" : inactive ? "inactive" : ended ? "completed" : "inactive"}
-                          </Badge>
-                        </div>
-                        <div className="mt-2 text-xs text-zinc-400">
-                          paid:{" "}
-                          <span className="font-mono text-zinc-200">
-                            {config ? `${formatTokenAmount(p.data.lockedAmount, config.xntDecimals, 6)} XNT` : "-"}
-                          </span>
-                        </div>
-                        <div className="mt-1 text-xs text-zinc-400">
-                          duration: <span className="font-mono text-zinc-200">{p.data.durationDays}d</span>
-                        </div>
-                        <div className="mt-1 text-xs text-zinc-400">
-                          ends: <span className="font-mono text-zinc-200">{formatUnixTs(p.data.lockEndTs)}</span>
-                        </div>
-                        {active ? (
-                          <div className="mt-2 text-xs text-zinc-400">
-                            remaining:{" "}
-                            <span className="font-mono text-zinc-200">
-                              {remaining == null ? "-" : formatDurationSeconds(remaining)}
-                            </span>
-                          </div>
-                        ) : ended ? (
-                          <div className="mt-3 flex items-center justify-between gap-3">
-                            <div className="text-xs text-zinc-500">
-                              Lock ended. Close to reclaim rent.
-                            </div>
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              disabled={busy !== null}
-                              onClick={() => void onClosePosition(p.pubkey).catch(() => null)}
-                            >
-                              Close
-                            </Button>
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                  {positions.length > 5 ? (
-                    <div className="text-xs text-zinc-500">Showing the 5 most recent miners.</div>
-                  ) : null}
-                </div>
-              )}
-            </Card>
-          </div>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-12">
-          <div className="md:col-span-12">
-            <Card>
-              <CardHeader title="Your stakes" description="Weekly claims. Multiple stakes allowed." />
-              {!publicKey ? (
-                <div className="mt-4 text-sm text-zinc-400">Connect wallet to view stakes.</div>
-              ) : stakingPositions.length === 0 ? (
-                <div className="mt-4 text-sm text-zinc-400">No MIND stakes yet.</div>
-              ) : (
-                <div className="mt-4 grid gap-3">
-                  {stakingPositions.map((stake) => {
-                    const lockEndTs = stake.data.lockEndTs;
-                    const startTs = stake.data.startTs;
-                    const amount = stake.data.amount;
-                    const totalWeighted = config ? BigInt(config.totalStakedMind.toString()) : 0n;
-                    const rewardEstimate =
-                      config && stakingVaultXntBalanceBase != null
-                        ? estimateStakeRewardParts(
-                            amount,
-                            stake.data.xpBoostBps,
-                            stake.data.durationDays,
-                            totalWeighted,
-                            stakingVaultXntBalanceBase
-                          )
-                        : null;
-                    const lockTotal = Math.max(1, lockEndTs - startTs);
-                    const elapsed = nowTs != null ? Math.max(0, Math.min(nowTs - startTs, lockTotal)) : 0;
-                    const progress = Math.min(100, Math.floor((elapsed / lockTotal) * 100));
-                    const claimReady =
-                      nowTs != null &&
-                      nowTs >= stake.data.lastClaimTs + STAKING_COOLDOWN_SECONDS;
-                    const nextClaimIn =
-                      nowTs != null
-                        ? Math.max(0, stake.data.lastClaimTs + STAKING_COOLDOWN_SECONDS - nowTs)
-                        : null;
-                    const unlocked = nowTs != null && nowTs >= lockEndTs;
-                    const claimLabel = `claim-stake-${stake.pubkey}` as BusyAction;
-                    const withdrawLabel = `withdraw-stake-${stake.pubkey}` as BusyAction;
-                    return (
-                      <div key={stake.pubkey} className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <div className="text-xs text-zinc-400">Stake</div>
-                            <div className="mt-1 font-mono text-xs text-zinc-200">{shortPk(stake.pubkey, 8)}</div>
-                          </div>
-                          <Badge variant={unlocked ? "success" : "warning"}>
-                            {unlocked ? "unlocked" : "locked"}
-                          </Badge>
-                        </div>
-                        <div className="mt-2 text-xs text-zinc-400">
-                          amount:{" "}
-                          <span className="font-mono text-zinc-200">
-                            {config
-                              ? `${formatTokenAmount(amount, config.mindDecimals, 6)} MIND`
-                              : "-"}
-                          </span>
-                        </div>
-                        <div className="mt-1 text-xs text-zinc-400">
-                          duration: <span className="font-mono text-zinc-200">{stake.data.durationDays}d</span>
-                        </div>
-                        <div className="mt-1 text-xs text-zinc-400">
-                          ends: <span className="font-mono text-zinc-200">{formatUnixTs(lockEndTs)}</span>
-                        </div>
-                        <div className="mt-2 text-xs text-zinc-400">
-                          XP boost: <span className="font-mono text-zinc-200">+{formatBps(stake.data.xpBoostBps)}</span>
-                        </div>
-                        <div className="mt-2 text-xs text-zinc-400">
-                          Pool share (no badge):{" "}
-                          <span className="font-mono text-zinc-200">
-                            {config && rewardEstimate?.base != null
-                              ? `${formatTokenAmount(rewardEstimate.base, config.xntDecimals, 6)} XNT`
-                              : "-"}
-                          </span>
-                        </div>
-                        <div className="mt-1 text-xs text-zinc-400">
-                          Pool share (with badge):{" "}
-                          <span className="font-mono text-zinc-200">
-                            {config && rewardEstimate?.boosted != null
-                              ? `${formatTokenAmount(rewardEstimate.boosted, config.xntDecimals, 6)} XNT`
-                              : "-"}
-                          </span>
-                        </div>
-                        <div className="mt-3 h-1.5 w-full rounded-full bg-white/10">
-                          <div
-                            className="h-1.5 rounded-full bg-gradient-to-r from-cyan-400 to-fuchsia-500"
-                            style={{ width: `${progress}%` }}
-                          />
-                        </div>
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          <Button
-                            size="sm"
-                            onClick={() => void onClaimStake(stake).catch(() => null)}
-                            disabled={busy !== null || !claimReady}
-                            title={claimReady ? undefined : "Claim available once per 7 days"}
-                          >
-                            {busy === claimLabel ? "Submitting…" : "Claim reward"}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => void onWithdrawStake(stake).catch(() => null)}
-                            disabled={busy !== null || !unlocked}
-                            title={!unlocked ? "Lock needs to end first" : undefined}
-                          >
-                            {busy === withdrawLabel ? "Submitting…" : "Withdraw stake"}
-                          </Button>
-                        </div>
-                        <div className="mt-2 text-xs text-zinc-500">
-                          {claimReady ? (
-                            <span className="text-emerald-300">Claim ready</span>
-                          ) : nextClaimIn != null ? (
-                            <>
-                              Next claim in{" "}
-                              <span className="font-mono text-zinc-200">
-                                {formatDurationSeconds(nextClaimIn)}
-                              </span>
-                            </>
-                          ) : (
-                            "Claim info pending"
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </Card>
-          </div>
-        </div>
-
-        {lastSig && (
-          <Card>
-            <CardHeader
-              title="Transaction"
-              description="Most recent confirmed signature."
-              right={<CopyButton text={lastSig} label="Copy sig" />}
-            />
-            <div className="mt-3 flex flex-col gap-2">
-              <div className="rounded-xl border border-white/10 bg-white/5 p-3 font-mono text-xs">{lastSig}</div>
+            {publicKey ? (
               <div className="flex items-center gap-2">
-                <a
-                  className="text-xs text-cyan-200 underline-offset-4 hover:underline"
-                  href={explorerTxUrl(lastSig)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  View in explorer
-                </a>
-                <Badge variant="muted">Program: {shortPk(getProgramId().toBase58(), 6)}</Badge>
+                <Badge variant="success">connected</Badge>
+                <Badge variant="muted">{shortPk(publicKey.toBase58(), 6)}</Badge>
               </div>
-            </div>
-          </Card>
-        )}
+            ) : (
+              <Badge variant="warning">connect wallet</Badge>
+            )}
+          </div>
 
-        {error && (
-          <Card className="border-rose-500/20">
-            <CardHeader
-              title="Error"
-              description="Simulation/RPC details."
-              right={
-                <div className="flex items-center gap-2">
-                  <Button variant="secondary" onClick={() => void refresh()} disabled={loading}>
-                    {loading ? "Retrying…" : "Retry"}
-                  </Button>
-                  <Badge variant="danger">failed</Badge>
-                </div>
-              }
+          {emissionNotStarted && config ? (
+            <div className="rounded-3xl border border-amber-400/30 bg-amber-400/10 p-4 text-xs text-amber-100">
+              Mining starts at{" "}
+              <span className="font-mono text-amber-50">
+                {formatUnixTs(config.emissionStartTs.toNumber())}
+              </span>
+              .
+            </div>
+          ) : null}
+
+          <SummaryGrid />
+          <ActionWizard />
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <Tabs
+              value={activeTab}
+              onValueChange={setActiveTab}
+              options={[
+                { value: "mine", label: "Mine XNT" },
+                { value: "stake", label: "Stake MIND" },
+                { value: "xp", label: "XP" },
+              ]}
             />
-            <pre className="mt-3 whitespace-pre-wrap rounded-xl border border-white/10 bg-zinc-950/40 p-3 text-xs text-rose-100">
-              {error}
-            </pre>
-          </Card>
-        )}
-
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-white/5 bg-zinc-950/40 backdrop-blur-xl md:hidden">
-          <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
-            <div className="text-xs text-zinc-400">
-              {publicKey ? (anyActive ? "Mining active" : "Ready to buy") : "Connect wallet"}
-            </div>
-            <Button
-              size="lg"
-              disabled={
-                busy !== null ||
-                !publicKey ||
-                emissionNotStarted ||
-                (anyActive && heartbeatDone && claimed)
-              }
-              onClick={() => {
-                if (!publicKey) return;
-                if (!anyActive) void onDeposit();
-                else if (!heartbeatDone) void onHeartbeat();
-                else if (!claimed) void onClaim();
-              }}
-              title={!publicKey ? "Connect wallet" : undefined}
-            >
-              {busy ? "Working…" : !anyActive ? "Buy" : !heartbeatDone ? "Heartbeat" : !claimed ? "Claim" : "Up to date"}
+            <Button variant="secondary" onClick={() => void refresh()} disabled={busy !== null || loading}>
+              {loading ? "Refreshing…" : "Refresh"}
             </Button>
           </div>
-        </div>
-      </main>
-    </div>
+
+          {activeTab === "mine" ? <MineSection /> : null}
+          {activeTab === "stake" ? <StakeSection /> : null}
+          {activeTab === "xp" ? <XPSection /> : null}
+
+          <TransactionStatus />
+
+          {error ? (
+            <Card className="border-rose-500/30">
+              <CardHeader
+                title="Error"
+                description="RPC or simulation details."
+                right={
+                  <div className="flex items-center gap-2">
+                    <Button variant="secondary" onClick={() => void refresh()} disabled={loading}>
+                      {loading ? "Retrying…" : "Retry"}
+                    </Button>
+                    <Badge variant="danger">failed</Badge>
+                  </div>
+                }
+              />
+              <pre className="mt-3 whitespace-pre-wrap rounded-2xl border border-white/10 bg-ink/80 p-3 text-xs text-rose-100">
+                {error}
+              </pre>
+            </Card>
+          ) : null}
+        </main>
+      </div>
+    </DashboardProvider>
   );
 }
