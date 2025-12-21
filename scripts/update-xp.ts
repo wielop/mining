@@ -39,6 +39,9 @@ const main = async () => {
   const xpBoostDiamondBps = Number(
     process.env.XP_BOOST_DIAMOND_BPS ?? DEFAULT_XP_BOOST_DIAMOND
   );
+  const mpCapBpsPerWallet = Number(
+    process.env.MP_CAP_BPS_PER_WALLET ?? config.mpCapBpsPerWallet
+  );
 
   console.log("[xp] config:", configPda.toBase58());
   console.log("[xp] xp_per_7d:", xpPer7d.toString());
@@ -59,13 +62,13 @@ const main = async () => {
     .adminUpdateConfig({
       th1: config.th1,
       th2: config.th2,
-      mpCapBpsPerWallet: config.mpCapBpsPerWallet,
+      mpCapBpsPerWallet,
       updateEpochSeconds: false,
       epochSeconds: config.epochSeconds,
       updateXpConfig: true,
-      xpPer7d,
-      xpPer14d,
-      xpPer30d,
+      xpPer7D: xpPer7d,
+      xpPer14D: xpPer14d,
+      xpPer30D: xpPer30d,
       xpTierSilver,
       xpTierGold,
       xpTierDiamond,
