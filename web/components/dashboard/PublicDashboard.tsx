@@ -1243,12 +1243,14 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
               )}
               {!publicKey ? (
                 <div className="mt-4 text-sm text-zinc-400">Connect wallet to heartbeat & claim.</div>
-              ) : !anyActive ? (
-                <div className="mt-4 text-sm text-zinc-400">
-                  Buy a miner to participate in the current epoch.
-                </div>
               ) : (
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <>
+                  {!anyActive ? (
+                    <div className="mt-4 text-sm text-zinc-400">
+                      No active miners. Heartbeat and claim require an active mining position.
+                    </div>
+                  ) : null}
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                     <div className="flex items-start justify-between gap-2">
                       <div>
@@ -1262,9 +1264,11 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
                     <div className="mt-4">
                       <Button
                         onClick={() => void onHeartbeat().catch(() => null)}
-                        disabled={busy !== null || heartbeatDone || currentEpoch == null}
+                        disabled={busy !== null || heartbeatDone || currentEpoch == null || !anyActive}
                         title={
-                          heartbeatDone
+                          !anyActive
+                            ? "No active mining position"
+                            : heartbeatDone
                             ? nextEpochCountdown
                               ? `Already recorded. ${formatEpochCountdown(nextEpochCountdown.seconds)} until next epoch.`
                               : "Already recorded"
@@ -1290,7 +1294,7 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
                     <div className="mt-3 text-xs text-zinc-400">
                       Est. reward:{" "}
                       <span className="font-mono text-zinc-200">
-                        {config && estimatedRewardBase != null
+                        {config && estimatedRewardBase != null && anyActive
                           ? `${formatTokenAmount(estimatedRewardBase, config.mindDecimals, 4)} MIND`
                           : "-"}
                       </span>
@@ -1298,8 +1302,16 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
                     <div className="mt-4">
                       <Button
                         onClick={() => void onClaim().catch(() => null)}
-                        disabled={busy !== null || !heartbeatDone || claimed}
-                        title={!heartbeatDone ? "Heartbeat required" : claimed ? "Already claimed" : undefined}
+                        disabled={busy !== null || !heartbeatDone || claimed || !anyActive}
+                        title={
+                          !anyActive
+                            ? "No active mining position"
+                            : !heartbeatDone
+                              ? "Heartbeat required"
+                              : claimed
+                                ? "Already claimed"
+                                : undefined
+                        }
                       >
                         {busy === "claim" ? "Submitting…" : "Claim current epoch"}
                       </Button>
@@ -1309,6 +1321,7 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
                     </div>
                   </div>
                 </div>
+                </>
               )}
             </Card>
           </div>
