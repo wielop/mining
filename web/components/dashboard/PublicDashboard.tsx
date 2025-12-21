@@ -859,28 +859,6 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
           <MiningActivityPanel />
           <MiningXpHero />
 
-          <Card className="border-cyan-400/10 bg-ink/80">
-            <CardHeader title="How it works" description="Four quick steps to mine and boost rewards." />
-            <div className="mt-4 grid gap-3 text-sm text-zinc-300 sm:grid-cols-2">
-              <div className="rounded-2xl border border-white/5 bg-white/5 p-3">
-                <div className="text-xs text-zinc-400">1</div>
-                <div className="mt-1 font-semibold text-white">Choose plan & deposit XNT</div>
-              </div>
-              <div className="rounded-2xl border border-white/5 bg-white/5 p-3">
-                <div className="text-xs text-zinc-400">2</div>
-                <div className="mt-1 font-semibold text-white">Claim MIND each epoch</div>
-              </div>
-              <div className="rounded-2xl border border-white/5 bg-white/5 p-3">
-                <div className="text-xs text-zinc-400">3</div>
-                <div className="mt-1 font-semibold text-white">Claim MIND + XP</div>
-              </div>
-              <div className="rounded-2xl border border-white/5 bg-white/5 p-3">
-                <div className="text-xs text-zinc-400">4</div>
-                <div className="mt-1 font-semibold text-white">Stake MIND to boost</div>
-              </div>
-            </div>
-          </Card>
-
           <SummaryCards />
 
           <div className="flex flex-wrap items-center justify-between gap-3">
