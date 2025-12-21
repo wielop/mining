@@ -45,6 +45,7 @@ import {
   decodeStakingPositionAccount,
   decodeUserPositionAccount,
   decodeUserProfileAccount,
+  tryDecodeStakingPositionAccount,
 } from "@/lib/decoders";
 import { formatDurationSeconds, formatTokenAmount, parseUiAmountToBase, shortPk } from "@/lib/format";
 import { formatError } from "@/lib/formatError";
@@ -207,10 +208,12 @@ export function PublicDashboard() {
       setPositions(decoded);
 
       const decodedStakes = stakingGpa
-        .map((a) => ({
-          pubkey: a.pubkey.toBase58(),
-          data: decodeStakingPositionAccount(Buffer.from(a.account.data)),
-        }))
+        .map((a) => {
+          const decoded = tryDecodeStakingPositionAccount(Buffer.from(a.account.data));
+          if (!decoded) return null;
+          return { pubkey: a.pubkey.toBase58(), data: decoded };
+        })
+        .filter((entry): entry is { pubkey: string; data: ReturnType<typeof decodeStakingPositionAccount> } => entry !== null)
         .sort((a, b) => b.data.startTs - a.data.startTs);
       setStakingPositions(decodedStakes);
 

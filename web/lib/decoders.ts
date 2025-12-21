@@ -46,6 +46,8 @@ export type DecodedStakingPosition = {
   stakeIndex: bigint;
 };
 
+const STAKING_POSITION_BASE_FIELDS_LEN = 32 + 8 + 8 + 8 + 2 + 2 + 8 + 8 + 1;
+export const STAKING_POSITION_MIN_LEN = 8 + STAKING_POSITION_BASE_FIELDS_LEN;
 function assertMinLen(data: Buffer, min: number, label: string) {
   if (data.length < min) throw new Error(`${label} too small: ${data.length} bytes`);
 }
@@ -156,10 +158,8 @@ export function decodeUserProfileAccount(data: Buffer): DecodedUserProfile {
 }
 
 export function decodeStakingPositionAccount(data: Buffer): DecodedStakingPosition {
-  // discriminator (8) + StakingPosition fields.
-  const baseFieldsLen = 32 + 8 + 8 + 8 + 2 + 2 + 8 + 8 + 1;
-  const hasRewardDebt = data.length >= 8 + baseFieldsLen + 16;
-  assertMinLen(data, 8 + baseFieldsLen, "StakingPosition");
+  const hasRewardDebt = data.length >= STAKING_POSITION_MIN_LEN + 16;
+  assertMinLen(data, STAKING_POSITION_MIN_LEN, "StakingPosition");
   let offset = 8;
   const owner = data.subarray(offset, offset + 32);
   offset += 32;
@@ -181,4 +181,13 @@ export function decodeStakingPositionAccount(data: Buffer): DecodedStakingPositi
   offset += 8;
   const stakeIndex = data.readBigUInt64LE(offset);
   return { owner, amount, startTs, lockEndTs, durationDays, xpBoostBps, rewardDebt, lastClaimTs, stakeIndex };
+}
+
+export function tryDecodeStakingPositionAccount(data: Buffer): DecodedStakingPosition | null {
+  if (data.length < STAKING_POSITION_MIN_LEN) return null;
+  try {
+    return decodeStakingPositionAccount(data);
+  } catch {
+    return null;
+  }
 }
