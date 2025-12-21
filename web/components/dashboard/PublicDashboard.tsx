@@ -123,6 +123,7 @@ export function PublicDashboard() {
   const [stakingVaultXntBalanceUi, setStakingVaultXntBalanceUi] = useState<string | null>(null);
   const [stakingVaultXntBalanceBase, setStakingVaultXntBalanceBase] = useState<bigint | null>(null);
   const [stakingVaultMindBalanceUi, setStakingVaultMindBalanceUi] = useState<string | null>(null);
+  const [rewardPoolHistory, setRewardPoolHistory] = useState<Array<{ ts: number; amount: bigint }>>([]);
 
   const [epochState, setEpochState] = useState<ReturnType<typeof decodeEpochStateAccount> | null>(null);
   const [userEpoch, setUserEpoch] = useState<ReturnType<typeof decodeUserEpochAccount> | null>(null);
@@ -285,6 +286,64 @@ export function PublicDashboard() {
       setLoading(false);
     }
   }, [connection, publicKey]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("pocm_reward_pool_history");
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Array<{ ts: number; amount: string }>;
+      if (!Array.isArray(parsed)) return;
+      setRewardPoolHistory(
+        parsed
+          .filter((p) => typeof p.ts === "number" && typeof p.amount === "string")
+          .map((p) => ({ ts: p.ts, amount: BigInt(p.amount) }))
+      );
+    } catch {
+      // ignore corrupted cache
+    }
+  }, []);
+
+  useEffect(() => {
+    if (stakingVaultXntBalanceBase == null || nowTs == null) return;
+    setRewardPoolHistory((prev) => {
+      const next = [...prev];
+      const last = next[next.length - 1];
+      if (!last || nowTs - last.ts >= 60) {
+        next.push({ ts: nowTs, amount: stakingVaultXntBalanceBase });
+      } else {
+        next[next.length - 1] = { ts: nowTs, amount: stakingVaultXntBalanceBase };
+      }
+      const cutoff = nowTs - 24 * 60 * 60;
+      const trimmed = next.filter((p) => p.ts >= cutoff).slice(-64);
+      try {
+        localStorage.setItem(
+          "pocm_reward_pool_history",
+          JSON.stringify(trimmed.map((p) => ({ ts: p.ts, amount: p.amount.toString() })))
+        );
+      } catch {
+        // ignore storage quota
+      }
+      return trimmed;
+    });
+  }, [nowTs, stakingVaultXntBalanceBase]);
+
+  const rewardPoolSeries = useMemo(() => {
+    if (rewardPoolHistory.length < 2) return null;
+    const amounts = rewardPoolHistory.map((p) => p.amount);
+    let min = amounts[0];
+    let max = amounts[0];
+    for (const v of amounts) {
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+    const span = max > min ? max - min : 1n;
+    const points = rewardPoolHistory.map((p, idx) => {
+      const x = (idx / Math.max(1, rewardPoolHistory.length - 1)) * 100;
+      const y = 100 - Number(((p.amount - min) * 100n) / span);
+      return `${x.toFixed(2)},${y.toFixed(2)}`;
+    });
+    return { points: points.join(" "), min, max };
+  }, [rewardPoolHistory]);
 
   const estimateStakeRewardBase = useCallback(
     (amountBase: bigint, boostBps: number, totalStakedBase: bigint, vaultBase: bigint) => {
@@ -1058,6 +1117,41 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
                 <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                   <div className="text-xs text-zinc-400">XNT liquidity</div>
                   <div className="mt-1 font-mono text-sm">{stakingVaultXntBalanceUi ?? "loading..."}</div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div className="text-xs text-zinc-400">Reward pool (24h)</div>
+                  {rewardPoolSeries ? (
+                    <svg viewBox="0 0 100 100" className="mt-2 h-16 w-full">
+                      <defs>
+                        <linearGradient id="rewardPoolFill" x1="0" x2="0" y1="0" y2="1">
+                          <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.35" />
+                          <stop offset="100%" stopColor="#a855f7" stopOpacity="0.05" />
+                        </linearGradient>
+                      </defs>
+                      <polyline
+                        fill="none"
+                        stroke="#22d3ee"
+                        strokeWidth="2"
+                        points={rewardPoolSeries.points}
+                      />
+                      <polyline
+                        fill="url(#rewardPoolFill)"
+                        stroke="none"
+                        points={`0,100 ${rewardPoolSeries.points} 100,100`}
+                      />
+                    </svg>
+                  ) : (
+                    <div className="mt-2 text-xs text-zinc-500">Zbieram dane…</div>
+                  )}
+                  <div className="mt-2 text-[11px] text-zinc-500">
+                    {rewardPoolSeries && config
+                      ? `${formatTokenAmount(rewardPoolSeries.min, config.xntDecimals, 6)} → ${formatTokenAmount(
+                          rewardPoolSeries.max,
+                          config.xntDecimals,
+                          6
+                        )} XNT`
+                      : "Brak historii"}
+                  </div>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                   <div className="text-xs text-zinc-400">Staked MIND</div>
