@@ -5,10 +5,10 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-pocm_vault_mining = "4BwetFdBHSkDTAByraaXiiwLFTQ5jj8w4mHGpYMrNn4r"
+pocm_vault_mining = "2oJ68QPvNqvdegxPczqGYz7bmTyBSW9D6ZYs4w1HSpL9"
 
 [programs.testnet]
-pocm_vault_mining = "4BwetFdBHSkDTAByraaXiiwLFTQ5jj8w4mHGpYMrNn4r"
+pocm_vault_mining = "2oJ68QPvNqvdegxPczqGYz7bmTyBSW9D6ZYs4w1HSpL9"
 
 [registry]
 url = "https://api.apr.dev"

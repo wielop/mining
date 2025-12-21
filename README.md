@@ -58,7 +58,7 @@ Tests cover init → deposit → heartbeat/claim, inactivity (no UserEpoch), wha
 ```
 ./scripts/testnet-deploy.sh
 ```
-Program ID: `4BwetFdBHSkDTAByraaXiiwLFTQ5jj8w4mHGpYMrNn4r`.
+Program ID: `2oJ68QPvNqvdegxPczqGYz7bmTyBSW9D6ZYs4w1HSpL9`.
 
 Configure the protocol (creates MIND mint + vault ATA off-chain, then runs `initialize`):
 ```
@@ -83,7 +83,7 @@ Vercel setup:
 - Set **Root Directory** to `web`.
 - Env vars:
   - `NEXT_PUBLIC_RPC_URL` (default: `https://rpc.testnet.x1.xyz`)
-  - `NEXT_PUBLIC_PROGRAM_ID` (default: `4BwetFdBHSkDTAByraaXiiwLFTQ5jj8w4mHGpYMrNn4r`)
+  - `NEXT_PUBLIC_PROGRAM_ID` (default: `2oJ68QPvNqvdegxPczqGYz7bmTyBSW9D6ZYs4w1HSpL9`)
 
 ### Env hints
 - `XNT_MINT` – existing XNT mint (not hardcoded).

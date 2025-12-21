@@ -6,7 +6,7 @@
 
 ## Program / PDA
 
-- Program ID: `4BwetFdBHSkDTAByraaXiiwLFTQ5jj8w4mHGpYMrNn4r`
+- Program ID: `2oJ68QPvNqvdegxPczqGYz7bmTyBSW9D6ZYs4w1HSpL9`
 - Config PDA: `5wWEPqQgteHbqDnWzya7kSLqKRJ74swr8aUoemd7Qv8L`
 - Vault authority PDA: `4PoWisH6YfvpVhmLv3Yn8wQA8TBmX4dtKWbQTUuZhiVV`
 
@@ -25,5 +25,4 @@
 ## Web (Vercel)
 
 - `NEXT_PUBLIC_RPC_URL=https://rpc.testnet.x1.xyz`
-- `NEXT_PUBLIC_PROGRAM_ID=4BwetFdBHSkDTAByraaXiiwLFTQ5jj8w4mHGpYMrNn4r`
-
+- `NEXT_PUBLIC_PROGRAM_ID=2oJ68QPvNqvdegxPczqGYz7bmTyBSW9D6ZYs4w1HSpL9`

@@ -5,7 +5,7 @@ use solana_program::program_option::COption;
 
 const STAKING_POSITION_SEED: &[u8] = b"stake";
 
-declare_id!("4BwetFdBHSkDTAByraaXiiwLFTQ5jj8w4mHGpYMrNn4r");
+declare_id!("2oJ68QPvNqvdegxPczqGYz7bmTyBSW9D6ZYs4w1HSpL9");
 
 const CONFIG_SEED: &[u8] = b"config";
 const VAULT_SEED: &[u8] = b"vault";
@@ -656,7 +656,7 @@ pub struct Initialize<'info> {
     #[account(mut)]
     pub payer: Signer<'info>,
     pub admin: Signer<'info>,
-    /// CHECK: PDA authority for vaults/minting
+    /// CHECK: PDA derived from VAULT_SEED/bump used as the vault authority
     #[account(seeds = [VAULT_SEED], bump)]
     pub vault_authority: UncheckedAccount<'info>,
     #[account(
@@ -767,7 +767,7 @@ pub struct Deposit<'info> {
     )]
     pub position: Account<'info, UserPosition>,
     #[account(seeds = [VAULT_SEED], bump = config.bumps.vault_authority)]
-    /// CHECK: authority PDA
+    /// CHECK: PDA derived from VAULT_SEED/bump used as the vault authority
     pub vault_authority: UncheckedAccount<'info>,
     #[account(mut, constraint = xnt_mint.key() == config.xnt_mint)]
     pub xnt_mint: Account<'info, Mint>,
@@ -824,7 +824,7 @@ pub struct CreateStake<'info> {
         seeds = [VAULT_SEED],
         bump = config.bumps.vault_authority
     )]
-    /// CHECK: PDA authority used for vaults/staking positions
+    /// CHECK: PDA derived from VAULT_SEED/bump used as the vault authority
     pub vault_authority: UncheckedAccount<'info>,
     #[account(
         mut,
@@ -866,7 +866,7 @@ pub struct ClaimStakeReward<'info> {
         seeds = [VAULT_SEED],
         bump = config.bumps.vault_authority
     )]
-    /// CHECK: PDA authority used only for vault transfers
+    /// CHECK: PDA derived from VAULT_SEED/bump used as the vault authority
     pub vault_authority: UncheckedAccount<'info>,
     #[account(
         mut,
@@ -905,7 +905,7 @@ pub struct WithdrawStake<'info> {
         seeds = [VAULT_SEED],
         bump = config.bumps.vault_authority
     )]
-    /// CHECK: PDA authority used only for vault transfers
+    /// CHECK: PDA derived from VAULT_SEED/bump used as the vault authority
     pub vault_authority: UncheckedAccount<'info>,
     #[account(
         mut,
@@ -968,7 +968,7 @@ pub struct Claim<'info> {
         seeds = [VAULT_SEED],
         bump = config.bumps.vault_authority
     )]
-    /// CHECK: signer PDA
+    /// CHECK: PDA derived from VAULT_SEED/bump used as the vault authority
     pub vault_authority: UncheckedAccount<'info>,
     #[account(
         mut,
@@ -1025,7 +1025,7 @@ pub struct AdminWithdrawTreasuryXnt<'info> {
         seeds = [VAULT_SEED],
         bump = config.bumps.vault_authority
     )]
-    /// CHECK: PDA authority
+    /// CHECK: PDA derived from VAULT_SEED/bump used as the vault authority
     pub vault_authority: UncheckedAccount<'info>,
     #[account(mut, constraint = xnt_mint.key() == config.xnt_mint)]
     pub xnt_mint: Account<'info, Mint>,
@@ -1080,7 +1080,7 @@ pub struct AdminFundStakingXnt<'info> {
         seeds = [VAULT_SEED],
         bump = config.bumps.vault_authority
     )]
-    /// CHECK: PDA authority for vault operations
+    /// CHECK: PDA derived from VAULT_SEED/bump used as the vault authority
     pub vault_authority: UncheckedAccount<'info>,
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,

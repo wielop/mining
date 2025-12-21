@@ -4,20 +4,20 @@
   "deployedAtUtc": "2025-12-18",
   "program": {
     "name": "pocm_vault_mining",
-    "programId": "4BwetFdBHSkDTAByraaXiiwLFTQ5jj8w4mHGpYMrNn4r",
+    "programId": "2oJ68QPvNqvdegxPczqGYz7bmTyBSW9D6ZYs4w1HSpL9",
     "programKeypairPath": "target/deploy/pocm_vault_mining-keypair.json",
     "soPath": "target/deploy/pocm_vault_mining.so",
     "soSizeBytes": 364224,
     "owner": "BPFLoaderUpgradeab1e11111111111111111111111",
-    "programDataAddress": "6Pzcp2NFGx3f5TRr5gPD9rtVmNsW9KWKUFQSh8fWTVpt",
+    "programDataAddress": "4F6GaUCz6sJtZr4SkqAR3ChbH74AHs5aLZaYnYgFuzN4",
     "upgradeAuthority": "Cjk6T9VU2N4eUXC3E5TzazJjwUeMrC25xdJyqf3F1s2z",
-    "lastDeployedInSlot": 122478431,
-    "programAccountBalanceSol": 2.91493848
+    "lastDeployedInSlot": 122725162,
+    "programAccountBalanceSol": 3.11605464
   },
   "deployer": {
     "walletPubkey": "Cjk6T9VU2N4eUXC3E5TzazJjwUeMrC25xdJyqf3F1s2z",
     "walletPath": "~/.config/solana/id.json",
-    "postDeployBalanceSol": 2.61505955
+    "postDeployBalanceSol": 1.01400247
   },
   "tooling": {
     "anchorCli": "0.30.1",
