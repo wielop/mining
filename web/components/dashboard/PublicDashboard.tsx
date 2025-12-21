@@ -373,10 +373,20 @@ export function PublicDashboard() {
   }, [rewardPoolHistory]);
 
   const estimateStakeRewardParts = useCallback(
-    (amountBase: bigint, boostBps: number, totalStakedBase: bigint, vaultBase: bigint) => {
-      if (amountBase <= 0n || totalStakedBase <= 0n || vaultBase <= 0n) return null;
-      const base = (vaultBase * amountBase) / totalStakedBase;
-      const boosted = (base * BigInt(10_000 + boostBps)) / 10_000n;
+    (
+      amountBase: bigint,
+      boostBps: number,
+      durationDays: number,
+      totalWeighted: bigint,
+      vaultBase: bigint
+    ) => {
+      if (amountBase <= 0n || totalWeighted <= 0n || vaultBase <= 0n) return null;
+      const durationMult =
+        durationDays === 7 ? 10_000n : durationDays === 14 ? 11_000n : durationDays === 30 ? 12_500n : 15_000n;
+      const baseWeight = (amountBase * durationMult) / 10_000n;
+      const boostedWeight = (baseWeight * BigInt(10_000 + boostBps)) / 10_000n;
+      const base = (vaultBase * baseWeight) / totalWeighted;
+      const boosted = (vaultBase * boostedWeight) / totalWeighted;
       return { base, boosted };
     },
     []
@@ -387,12 +397,25 @@ export function PublicDashboard() {
     try {
       const amountBase = parseUiAmountToBase(stakeAmountUi, config.mindDecimals);
       if (amountBase <= 0n) return null;
-      const totalStaked = BigInt(config.totalStakedMind.toString()) + amountBase;
-      return estimateStakeRewardParts(amountBase, userProfile.xpBoostBps, totalStaked, stakingVaultXntBalanceBase);
+      const totalWeighted = BigInt(config.totalStakedMind.toString());
+      return estimateStakeRewardParts(
+        amountBase,
+        userProfile.xpBoostBps,
+        stakeDurationDays,
+        totalWeighted,
+        stakingVaultXntBalanceBase
+      );
     } catch {
       return null;
     }
-  }, [config, estimateStakeRewardParts, stakeAmountUi, stakingVaultXntBalanceBase, userProfile]);
+  }, [
+    config,
+    estimateStakeRewardParts,
+    stakeAmountUi,
+    stakeDurationDays,
+    stakingVaultXntBalanceBase,
+    userProfile,
+  ]);
 
   useEffect(() => {
     void refresh();
@@ -1222,6 +1245,12 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
                   <div className="text-xs text-zinc-400">Staked MIND</div>
                   <div className="mt-1 font-mono text-sm">
                     {config
+                      ? stakingVaultMindBalanceUi ?? "-"
+                      : "-"}
+                  </div>
+                  <div className="mt-1 text-[11px] text-zinc-500">
+                    Weighted total:{" "}
+                    {config
                       ? formatTokenAmount(BigInt(config.totalStakedMind.toString()), config.mindDecimals, 4)
                       : "-"}
                   </div>
@@ -1268,6 +1297,9 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
                     </button>
                   ))}
                 </div>
+                <div className="mt-2 text-[11px] text-zinc-500">
+                  Multipliers: 7d 1.0x • 14d 1.1x • 30d 1.25x • 60d 1.5x
+                </div>
                 <div className="mt-4">
                   <Button
                     size="lg"
@@ -1278,7 +1310,7 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
                   </Button>
                 </div>
                 <div className="mt-2 text-xs text-zinc-400">
-                  Pool share (base):{" "}
+                  Pool share (no badge):{" "}
                   <span className="font-mono text-zinc-200">
                     {config && stakeEstimate?.base != null
                       ? `${formatTokenAmount(stakeEstimate.base, config.xntDecimals, 6)} XNT`
@@ -1286,7 +1318,7 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
                   </span>
                 </div>
                 <div className="mt-1 text-xs text-zinc-400">
-                  Est. weekly reward (with XP):{" "}
+                  Pool share (with badge):{" "}
                   <span className="font-mono text-zinc-200">
                     {config && stakeEstimate?.boosted != null
                       ? `${formatTokenAmount(stakeEstimate.boosted, config.xntDecimals, 6)} XNT`
@@ -1493,13 +1525,14 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
                     const lockEndTs = stake.data.lockEndTs;
                     const startTs = stake.data.startTs;
                     const amount = stake.data.amount;
-                    const totalStakedBase = config ? BigInt(config.totalStakedMind.toString()) : 0n;
+                    const totalWeighted = config ? BigInt(config.totalStakedMind.toString()) : 0n;
                     const rewardEstimate =
                       config && stakingVaultXntBalanceBase != null
                         ? estimateStakeRewardParts(
                             amount,
                             stake.data.xpBoostBps,
-                            totalStakedBase,
+                            stake.data.durationDays,
+                            totalWeighted,
                             stakingVaultXntBalanceBase
                           )
                         : null;
@@ -1545,7 +1578,7 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
                           XP boost: <span className="font-mono text-zinc-200">+{formatBps(stake.data.xpBoostBps)}</span>
                         </div>
                         <div className="mt-2 text-xs text-zinc-400">
-                          Pool share (base):{" "}
+                          Pool share (no badge):{" "}
                           <span className="font-mono text-zinc-200">
                             {config && rewardEstimate?.base != null
                               ? `${formatTokenAmount(rewardEstimate.base, config.xntDecimals, 6)} XNT`
@@ -1553,7 +1586,7 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
                           </span>
                         </div>
                         <div className="mt-1 text-xs text-zinc-400">
-                          Est. weekly reward (with XP):{" "}
+                          Pool share (with badge):{" "}
                           <span className="font-mono text-zinc-200">
                             {config && rewardEstimate?.boosted != null
                               ? `${formatTokenAmount(rewardEstimate.boosted, config.xntDecimals, 6)} XNT`

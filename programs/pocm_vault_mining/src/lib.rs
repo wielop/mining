@@ -300,9 +300,11 @@ pub mod pocm_vault_mining {
         );
         token::transfer(transfer_ctx, amount)?;
 
+        let weight = staking_weight(amount, duration_days, position.xp_boost_bps)?;
+        let weight_u64 = u64::try_from(weight).map_err(|_| ErrorCode::MathOverflow)?;
         cfg.total_staked_mind = cfg
             .total_staked_mind
-            .checked_add(amount)
+            .checked_add(weight_u64)
             .ok_or(ErrorCode::MathOverflow)?;
 
         emit!(Staked {
@@ -332,18 +334,11 @@ pub mod pocm_vault_mining {
         let vault_balance = ctx.accounts.staking_vault_xnt_ata.amount as u128;
         require!(vault_balance > 0, ErrorCode::NoStakingRewards);
 
-        let reward_base = vault_balance
-            .checked_mul(position.amount as u128)
+        let weight = staking_weight(position.amount, position.duration_days, position.xp_boost_bps)?;
+        let reward = vault_balance
+            .checked_mul(weight)
             .ok_or(ErrorCode::MathOverflow)?
             .checked_div(cfg.total_staked_mind as u128)
-            .ok_or(ErrorCode::MathOverflow)?;
-        let boost_multiplier = 10_000u128
-            .checked_add(position.xp_boost_bps as u128)
-            .ok_or(ErrorCode::MathOverflow)?;
-        let reward = reward_base
-            .checked_mul(boost_multiplier)
-            .ok_or(ErrorCode::MathOverflow)?
-            .checked_div(10_000u128)
             .ok_or(ErrorCode::MathOverflow)?;
         let reward_u64 = u64::try_from(reward).map_err(|_| ErrorCode::MathOverflow)?;
         require!(reward_u64 > 0, ErrorCode::NoStakingRewards);
@@ -378,9 +373,11 @@ pub mod pocm_vault_mining {
         require!(now >= position.lock_end_ts, ErrorCode::LockNotFinished);
 
         let cfg = &mut ctx.accounts.config;
+        let weight = staking_weight(position.amount, position.duration_days, position.xp_boost_bps)?;
+        let weight_u64 = u64::try_from(weight).map_err(|_| ErrorCode::MathOverflow)?;
         cfg.total_staked_mind = cfg
             .total_staked_mind
-            .checked_sub(position.amount)
+            .checked_sub(weight_u64)
             .ok_or(ErrorCode::MathOverflow)?;
 
         let signer_seeds: &[&[u8]] = &[VAULT_SEED, &[cfg.bumps.vault_authority]];
@@ -654,6 +651,15 @@ pub mod pocm_vault_mining {
     ) -> Result<()> {
         let config = &mut ctx.accounts.config;
         config.staking_vault_xnt_ata = ctx.accounts.staking_vault_xnt_ata.key();
+        Ok(())
+    }
+
+    pub fn admin_set_staking_weighted_total(
+        ctx: Context<AdminSetStakingWeightedTotal>,
+        total_weighted: u64,
+    ) -> Result<()> {
+        let config = &mut ctx.accounts.config;
+        config.total_staked_mind = total_weighted;
         Ok(())
     }
 }
@@ -1130,6 +1136,18 @@ pub struct AdminUpdateStakingVault<'info> {
     pub staking_vault_xnt_ata: Account<'info, TokenAccount>,
 }
 
+#[derive(Accounts)]
+pub struct AdminSetStakingWeightedTotal<'info> {
+    pub admin: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [CONFIG_SEED],
+        bump = config.bumps.config,
+        has_one = admin
+    )]
+    pub config: Account<'info, Config>,
+}
+
 #[derive(AnchorSerialize, AnchorDeserialize, Clone)]
 pub struct AdminUpdateParams {
     pub th1: u64,
@@ -1469,6 +1487,32 @@ fn apply_mining_xp(
 
 fn is_valid_staking_duration(duration: u16) -> bool {
     matches!(duration, 7 | 14 | 30 | 60)
+}
+
+fn staking_duration_multiplier_bps(duration: u16) -> Result<u16> {
+    match duration {
+        7 => Ok(10_000),
+        14 => Ok(11_000),
+        30 => Ok(12_500),
+        60 => Ok(15_000),
+        _ => Err(error!(ErrorCode::InvalidStakingDuration)),
+    }
+}
+
+fn staking_weight(amount: u64, duration: u16, xp_boost_bps: u16) -> Result<u128> {
+    let duration_mult = staking_duration_multiplier_bps(duration)? as u128;
+    let base = (amount as u128)
+        .checked_mul(duration_mult)
+        .ok_or(ErrorCode::MathOverflow)?
+        .checked_div(BPS_DENOMINATOR)
+        .ok_or(ErrorCode::MathOverflow)?;
+    let boost = 10_000u128
+        .checked_add(xp_boost_bps as u128)
+        .ok_or(ErrorCode::MathOverflow)?;
+    base.checked_mul(boost)
+        .ok_or(ErrorCode::MathOverflow)?
+        .checked_div(BPS_DENOMINATOR)
+        .ok_or(ErrorCode::MathOverflow.into())
 }
 
 #[error_code]

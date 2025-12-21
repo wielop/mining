@@ -121,6 +121,53 @@
       "args": []
     },
     {
+      "name": "admin_set_staking_weighted_total",
+      "discriminator": [
+        225,
+        211,
+        43,
+        147,
+        212,
+        183,
+        91,
+        214
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true,
+          "relations": [
+            "config"
+          ]
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "total_weighted",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "admin_withdraw_treasury_xnt",
       "discriminator": [
         173,
