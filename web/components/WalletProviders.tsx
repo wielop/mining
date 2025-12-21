@@ -29,8 +29,9 @@ export function WalletProviders({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const logKey = "__pocm_diag_logged__";
-    if (!(logKey in globalThis)) {
-      globalThis[logKey as keyof typeof globalThis] = true;
+    const globalAny = globalThis as { [key: string]: unknown };
+    if (!(logKey in globalAny)) {
+      globalAny[logKey] = true;
       try {
         console.log("[pocm] rpc", getRpcUrl());
         console.log("[pocm] program", getProgramId().toBase58());
@@ -101,8 +102,9 @@ function WalletLogger() {
   useEffect(() => {
     if (!publicKey) return;
     const logKey = "__pocm_wallet_logged__";
-    if (logKey in globalThis) return;
-    globalThis[logKey as keyof typeof globalThis] = true;
+    const globalAny = globalThis as { [key: string]: unknown };
+    if (logKey in globalAny) return;
+    globalAny[logKey] = true;
     console.log("[pocm] wallet", publicKey.toBase58());
   }, [publicKey]);
   return null;
