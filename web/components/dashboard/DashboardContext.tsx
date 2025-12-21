@@ -47,10 +47,10 @@ export type DashboardContextValue = {
   planOptions: MiningPlanOption[];
   emissionNotStarted: boolean;
   onDeposit: () => Promise<void>;
-  onClaim: () => Promise<void>;
+  onClaim: (amountBase: bigint) => Promise<void>;
   onClosePosition: (pubkey: string) => Promise<void>;
   onStake: () => Promise<void>;
-  onClaimStake: (stake: StakingPosition) => Promise<void>;
+  onClaimStake: (stake: StakingPosition, amountBase: bigint) => Promise<void>;
   onWithdrawStake: (stake: StakingPosition) => Promise<void>;
   busy: BusyAction | null;
   loading: boolean;

@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
-import { formatDurationSeconds, formatTokenAmount, formatUnixTs } from "@/lib/format";
+import { formatDurationSeconds, formatTokenAmount, formatUnixTs, parseUiAmountToBase } from "@/lib/format";
 import { getCurrentEpochFrom } from "@/lib/solana";
 
 export function MiningActivityPanel() {
@@ -19,10 +20,10 @@ export function MiningActivityPanel() {
     onClaim,
     nextEpochCountdown,
     estimatedRewardBase,
-    currentEpoch,
   } = useDashboard();
 
   const [tickNowTs, setTickNowTs] = useState<number | null>(null);
+  const [claimAmountUi, setClaimAmountUi] = useState("");
 
   useEffect(() => {
     if (nowTs == null) return;
@@ -45,13 +46,6 @@ export function MiningActivityPanel() {
     return Math.max(0, nextStart - tickNowTs);
   }, [config, tickNowTs]);
 
-  const accruedSinceClaimBase = useMemo(() => {
-    if (!config || estimatedRewardBase == null || liveNextEpochSeconds == null) return null;
-    const epochSeconds = Math.max(1, config.epochSeconds.toNumber());
-    const elapsed = Math.max(0, epochSeconds - liveNextEpochSeconds);
-    return (estimatedRewardBase * BigInt(elapsed)) / BigInt(epochSeconds);
-  }, [config, estimatedRewardBase, liveNextEpochSeconds]);
-
   const rewardForDurationBase = (durationDays: number) => {
     if (!config) return null;
     if (durationDays === 7) return BigInt(config.mindReward7d.toString());
@@ -66,39 +60,68 @@ export function MiningActivityPanel() {
     return total / BigInt(durationDays);
   };
 
-  const claimableForPosition = (durationDays: number, lockStartTs: number, lockEndTs: number, lastClaimedEpoch: bigint) => {
-    if (!config || currentEpoch == null || currentEpoch < 0) return 0;
-    const startEpoch = getCurrentEpochFrom(config, lockStartTs);
-    const endEpoch = getCurrentEpochFrom(config, lockEndTs);
-    const effectiveLast = Math.max(Number(lastClaimedEpoch), startEpoch);
-    const cappedNow = Math.min(currentEpoch, endEpoch);
-    return Math.max(0, cappedNow - effectiveLast);
+  const claimableForPosition = (
+    durationDays: number,
+    lockStartTs: number,
+    lockEndTs: number,
+    claimedAmount: bigint
+  ) => {
+    if (!config) return 0n;
+    const now = tickNowTs ?? nowTs;
+    if (now == null || now <= lockStartTs) return 0n;
+    const totalReward = rewardForDurationBase(durationDays);
+    if (totalReward == null) return 0n;
+    const durationSeconds = Math.max(0, lockEndTs - lockStartTs);
+    if (durationSeconds <= 0) return 0n;
+    const elapsedSeconds = Math.max(0, Math.min(now, lockEndTs) - lockStartTs);
+    if (elapsedSeconds <= 0) return 0n;
+    const accrued =
+      (totalReward * BigInt(elapsedSeconds)) / BigInt(durationSeconds);
+    return accrued > claimedAmount ? accrued - claimedAmount : 0n;
   };
 
   const claimablePositions = positions.filter((pos) => pos.data.lockedAmount > 0n);
   const claimableTotalBase = claimablePositions.reduce((acc, pos) => {
-    const perEpoch = rewardPerEpochBase(pos.data.durationDays);
-    if (perEpoch == null) return acc;
-    const epochs = claimableForPosition(
+    const claimable = claimableForPosition(
       pos.data.durationDays,
       pos.data.lockStartTs,
       pos.data.lockEndTs,
-      pos.data.lastClaimedEpoch
+      pos.data.accruedOwed
     );
-    return acc + perEpoch * BigInt(epochs);
+    return acc + claimable;
   }, 0n);
+
+  const accruedSinceClaimBase = useMemo(() => claimableTotalBase, [claimableTotalBase]);
+
+  const claimAmountBase = useMemo(() => {
+    if (!config) return 0n;
+    try {
+      return parseUiAmountToBase(claimAmountUi, config.mindDecimals);
+    } catch {
+      return 0n;
+    }
+  }, [claimAmountUi, config]);
+
+  const handleClaimMax = () => {
+    if (!config) return;
+    setClaimAmountUi(formatTokenAmount(claimableTotalBase, config.mindDecimals, config.mindDecimals));
+  };
 
   const claimDisabledReason = !publicKey
     ? "Connect wallet."
-    : !config || currentEpoch == null
-      ? "Epoch data unavailable."
+    : !config
+      ? "Config unavailable."
     : !claimablePositions.length
       ? "No miners."
-      : claimableTotalBase <= 0n
-        ? "Nothing accrued yet."
-        : busy
-          ? "Transaction pending."
-          : null;
+    : claimableTotalBase <= 0n
+      ? "Nothing accrued yet."
+    : claimAmountBase <= 0n
+      ? "Enter claim amount."
+    : claimAmountBase > claimableTotalBase
+      ? "Amount exceeds accrued rewards."
+      : busy
+        ? "Transaction pending."
+        : null;
 
   const sortedMiners = [...activePositions].sort((a, b) =>
     a.data.lockedAmount > b.data.lockedAmount ? -1 : a.data.lockedAmount < b.data.lockedAmount ? 1 : 0
@@ -296,7 +319,7 @@ export function MiningActivityPanel() {
                 </span>
               </div>
               <div className="mt-1 text-xs text-zinc-400">
-                Accrued since claim{" "}
+                Accrued now{" "}
                 <span className="font-mono text-zinc-200">
                   {config && accruedSinceClaimBase != null
                     ? `${formatTokenAmount(accruedSinceClaimBase, config.mindDecimals, 4)} MIND`
@@ -333,10 +356,26 @@ export function MiningActivityPanel() {
             </div>
           </div>
           <div className="mt-4 grid gap-3">
+            <Input
+              value={claimAmountUi}
+              onChange={setClaimAmountUi}
+              placeholder="Claim amount (MIND)"
+              disabled={busy !== null}
+              right={
+                <button
+                  type="button"
+                  className="rounded-full border border-cyan-300/30 px-2 py-1 text-[10px] text-cyan-100"
+                  onClick={handleClaimMax}
+                  disabled={!config || claimableTotalBase <= 0n}
+                >
+                  Max
+                </button>
+              }
+            />
             <Button
               size="lg"
               variant="primary"
-              onClick={() => void onClaim().catch(() => null)}
+              onClick={() => void onClaim(claimAmountBase).catch(() => null)}
               disabled={!!claimDisabledReason}
             >
               {busy === "claim" ? "Submitting…" : "CLAIM"}

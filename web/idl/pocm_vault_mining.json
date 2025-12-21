@@ -387,7 +387,12 @@
           "address": "11111111111111111111111111111111"
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
     },
     {
       "name": "create_position",
@@ -864,6 +869,10 @@
       "args": [
         {
           "name": "stake_index",
+          "type": "u64"
+        },
+        {
+          "name": "amount",
           "type": "u64"
         }
       ]
@@ -1492,6 +1501,16 @@
       "code": 6027,
       "name": "NoStakedTokens",
       "msg": "No tokens are currently staked"
+    },
+    {
+      "code": 6028,
+      "name": "ClaimAmountTooLarge",
+      "msg": "Claim amount exceeds available rewards"
+    },
+    {
+      "code": 6029,
+      "name": "InsufficientVaultBalance",
+      "msg": "Staking vault balance too low"
     }
   ],
   "types": [
@@ -1589,15 +1608,7 @@
             "type": "pubkey"
           },
           {
-            "name": "epoch_index",
-            "type": "u64"
-          },
-          {
             "name": "reward",
-            "type": "u64"
-          },
-          {
-            "name": "epochs_claimed",
             "type": "u64"
           },
           {
@@ -1741,16 +1752,16 @@
             "type": "u64"
           },
           {
-            "name": "total_xp",
+            "name": "staking_reward_per_weight",
             "type": "u128"
           },
           {
-            "name": "bumps",
-            "type": {
-              "defined": {
-                "name": "ConfigBumps"
-              }
-            }
+            "name": "staking_reward_pending",
+            "type": "u128"
+          },
+          {
+            "name": "total_xp",
+            "type": "u128"
           },
           {
             "name": "mind_reward_7d",
@@ -1763,6 +1774,14 @@
           {
             "name": "mind_reward_28d",
             "type": "u64"
+          },
+          {
+            "name": "bumps",
+            "type": {
+              "defined": {
+                "name": "ConfigBumps"
+              }
+            }
           }
         ]
       }
@@ -2111,6 +2130,10 @@
           {
             "name": "xp_boost_bps",
             "type": "u16"
+          },
+          {
+            "name": "reward_debt",
+            "type": "u128"
           },
           {
             "name": "last_claim_ts",

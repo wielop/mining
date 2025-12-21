@@ -496,12 +496,13 @@ export function PublicDashboard() {
     }
   };
 
-  const onClaim = async () => {
+  const onClaim = async (amountBase: bigint) => {
     if (!publicKey) throw new Error("Connect a wallet first");
     if (!anchorWallet) throw new Error("Wallet is not ready for Anchor");
     if (!config) throw new Error("Config not loaded");
     if (busy) return;
     if (!positions.some((p) => p.data.lockedAmount > 0n)) throw new Error("No miners found");
+    if (amountBase <= 0n) throw new Error("Amount must be greater than 0");
 
     setBusy("claim");
     try {
@@ -510,7 +511,7 @@ export function PublicDashboard() {
         const vaultAuthority = deriveVaultPda();
         const userMindAta = getAssociatedTokenAddressSync(config.mindMint, publicKey);
         const ix = await program.methods
-          .claim()
+          .claim(new BN(amountBase.toString()))
           .accounts({
             owner: publicKey,
             config: deriveConfigPda(),
@@ -594,11 +595,15 @@ const onStake = async () => {
   }
 };
 
-const onClaimStake = async (stake: { pubkey: string; data: ReturnType<typeof decodeStakingPositionAccount> }) => {
+const onClaimStake = async (
+  stake: { pubkey: string; data: ReturnType<typeof decodeStakingPositionAccount> },
+  amountBase: bigint
+) => {
   if (!publicKey) throw new Error("Connect a wallet first");
   if (!anchorWallet) throw new Error("Wallet is not ready for Anchor");
   if (!config) throw new Error("Config not loaded");
   if (busy) return;
+  if (amountBase <= 0n) throw new Error("Amount must be greater than 0");
 
   const stakeIndex = stake.data.stakeIndex;
   const busyLabel = `claim-stake-${stake.pubkey}` as BusyAction;
@@ -618,7 +623,7 @@ const onClaimStake = async (stake: { pubkey: string; data: ReturnType<typeof dec
         )
       );
       const ix = await program.methods
-        .claimStakeReward(new BN(stakeIndex.toString()))
+        .claimStakeReward(new BN(stakeIndex.toString()), new BN(amountBase.toString()))
         .accounts({
           owner: publicKey,
           config: deriveConfigPda(),

@@ -18,6 +18,7 @@ const DEFAULT_SOFT_HALVING_DAYS: u64 = 90;
 const DEFAULT_SOFT_HALVING_DROP_BPS: u16 = 1_000; // 10%
 const DEFAULT_MP_CAP_BPS: u16 = 1_000; // 10%
 const DAILY_EMISSION_TOKENS: u64 = 100_000;
+const STAKING_REWARD_SCALE: u128 = 1_000_000_000_000_000_000; // 1e18
 
 #[program]
 pub mod pocm_vault_mining {
@@ -99,6 +100,8 @@ pub mod pocm_vault_mining {
         config.mind_reward_7d = params.mind_reward_7d;
         config.mind_reward_14d = params.mind_reward_14d;
         config.mind_reward_28d = params.mind_reward_28d;
+        config.staking_reward_per_weight = 0;
+        config.staking_reward_pending = 0;
         config.bumps = bumps;
 
         emit!(InitializeEvent {
@@ -192,7 +195,6 @@ pub mod pocm_vault_mining {
             SECONDS_PER_DAY
         };
         let now = Clock::get()?.unix_timestamp;
-        let current_epoch = epoch_index_for_ts(cfg, now)?;
         let lock_duration = (position.duration_days as i64)
             .checked_mul(lock_day_seconds)
             .ok_or(ErrorCode::MathOverflow)?;
@@ -227,6 +229,7 @@ pub mod pocm_vault_mining {
                 ),
                 staking_share,
             )?;
+            accrue_staking_rewards(cfg, staking_share)?;
         }
 
         position.locked_amount = amount;
@@ -234,7 +237,8 @@ pub mod pocm_vault_mining {
         position.lock_end_ts = now
             .checked_add(lock_duration)
             .ok_or(ErrorCode::MathOverflow)?;
-        position.last_claimed_epoch = current_epoch;
+        position.accrued_owed = 0;
+        position.last_claimed_epoch = 0;
 
         let xp_gain = xp_for_duration(position.duration_days, cfg)?;
         apply_mining_xp(&mut ctx.accounts.user_profile, cfg, xp_gain)?;
@@ -309,6 +313,12 @@ pub mod pocm_vault_mining {
             .total_staked_mind
             .checked_add(weight_u64)
             .ok_or(ErrorCode::MathOverflow)?;
+        position.reward_debt = weight
+            .checked_mul(cfg.staking_reward_per_weight)
+            .ok_or(ErrorCode::MathOverflow)?
+            .checked_div(STAKING_REWARD_SCALE)
+            .ok_or(ErrorCode::MathOverflow)?;
+        apply_pending_staking_rewards(cfg)?;
 
         emit!(Staked {
             owner: ctx.accounts.owner.key(),
@@ -319,32 +329,36 @@ pub mod pocm_vault_mining {
         Ok(())
     }
 
-    pub fn claim_stake_reward(ctx: Context<ClaimStakeReward>, _stake_index: u64) -> Result<()> {
+    pub fn claim_stake_reward(
+        ctx: Context<ClaimStakeReward>,
+        _stake_index: u64,
+        amount: u64,
+    ) -> Result<()> {
         let now = Clock::get()?.unix_timestamp;
         let position = &mut ctx.accounts.staking_position;
-        let base_ts = if position.last_claim_ts == 0 {
-            position.start_ts
-        } else {
-            position.last_claim_ts
-        };
-        let next_claim = base_ts
-            .checked_add(7 * SECONDS_PER_DAY)
-            .ok_or(ErrorCode::MathOverflow)?;
-        require!(now >= next_claim, ErrorCode::TooEarlyClaim);
+        require!(amount > 0, ErrorCode::InvalidAmount);
 
-        let cfg = &ctx.accounts.config;
+        let cfg = &mut ctx.accounts.config;
         require!(cfg.total_staked_mind > 0, ErrorCode::NoStakedTokens);
+        apply_pending_staking_rewards(cfg)?;
         let vault_balance = ctx.accounts.staking_vault_xnt_ata.amount as u128;
-        require!(vault_balance > 0, ErrorCode::NoStakingRewards);
+        require!(
+            vault_balance >= amount as u128,
+            ErrorCode::InsufficientVaultBalance
+        );
 
         let weight = staking_weight(position.amount, position.duration_days, position.xp_boost_bps)?;
-        let reward = vault_balance
-            .checked_mul(weight)
+        let accrued = weight
+            .checked_mul(cfg.staking_reward_per_weight)
             .ok_or(ErrorCode::MathOverflow)?
-            .checked_div(cfg.total_staked_mind as u128)
+            .checked_div(STAKING_REWARD_SCALE)
             .ok_or(ErrorCode::MathOverflow)?;
-        let reward_u64 = u64::try_from(reward).map_err(|_| ErrorCode::MathOverflow)?;
-        require!(reward_u64 > 0, ErrorCode::NoStakingRewards);
+        let claimable = accrued.saturating_sub(position.reward_debt);
+        require!(claimable > 0, ErrorCode::NoStakingRewards);
+        require!(
+            (amount as u128) <= claimable,
+            ErrorCode::ClaimAmountTooLarge
+        );
 
         let signer_seeds: &[&[u8]] = &[VAULT_SEED, &[cfg.bumps.vault_authority]];
         token::transfer(
@@ -357,14 +371,18 @@ pub mod pocm_vault_mining {
                 },
                 &[signer_seeds],
             ),
-            reward_u64,
+            amount,
         )?;
 
+        position.reward_debt = position
+            .reward_debt
+            .checked_add(amount as u128)
+            .ok_or(ErrorCode::MathOverflow)?;
         position.last_claim_ts = now;
 
         emit!(StakeRewardClaimed {
             owner: ctx.accounts.owner.key(),
-            amount: reward_u64,
+            amount,
             xp_boost_bps: position.xp_boost_bps,
         });
         Ok(())
@@ -383,6 +401,7 @@ pub mod pocm_vault_mining {
             .checked_sub(weight_u64)
             .ok_or(ErrorCode::MathOverflow)?;
 
+        let withdrawn_amount = position.amount;
         let signer_seeds: &[&[u8]] = &[VAULT_SEED, &[cfg.bumps.vault_authority]];
         token::transfer(
             CpiContext::new_with_signer(
@@ -394,23 +413,26 @@ pub mod pocm_vault_mining {
                 },
                 &[signer_seeds],
             ),
-            position.amount,
+            withdrawn_amount,
         )?;
+
+        let position = ctx.accounts.staking_position.as_mut();
+        position.amount = 0;
+        position.reward_debt = 0;
+        position.last_claim_ts = now;
 
         emit!(StakeWithdrawn {
             owner: ctx.accounts.owner.key(),
-            amount: position.amount,
+            amount: withdrawn_amount,
         });
         Ok(())
     }
 
-    pub fn claim(ctx: Context<Claim>) -> Result<()> {
+    pub fn claim(ctx: Context<Claim>, amount: u64) -> Result<()> {
         let config = &mut ctx.accounts.config;
         let now = Clock::get()?.unix_timestamp;
-        let current_epoch = epoch_index_for_ts(config, now)?;
-        let mut total_reward: u128 = 0;
-        let mut total_epochs: u64 = 0;
-        let mut positions_count: u64 = 0;
+        require!(amount > 0, ErrorCode::InvalidAmount);
+        let mut total_claimable: u128 = 0;
 
         for acc_info in ctx.remaining_accounts.iter() {
             if acc_info.owner != &crate::ID || !acc_info.is_writable {
@@ -423,54 +445,48 @@ pub mod pocm_vault_mining {
             if position.locked_amount == 0 {
                 continue;
             }
-            if now < position.lock_start_ts {
-                continue;
-            }
-            let start_epoch = epoch_index_for_ts(config, position.lock_start_ts)?;
-            let end_epoch = epoch_index_for_ts(config, position.lock_end_ts)?;
-            let last_claimed_epoch = position.last_claimed_epoch.max(start_epoch);
-            if last_claimed_epoch >= end_epoch {
-                continue;
-            }
-            let claimable_epochs = current_epoch
-                .min(end_epoch)
-                .saturating_sub(last_claimed_epoch);
-            if claimable_epochs == 0 {
+            if now <= position.lock_start_ts {
                 continue;
             }
             let total_reward_for_position = reward_for_duration(position.duration_days, config)?;
-            let reward_per_epoch = total_reward_for_position
-                .checked_div(position.duration_days as u128)
+            let duration_seconds = position
+                .lock_end_ts
+                .checked_sub(position.lock_start_ts)
                 .ok_or(ErrorCode::MathOverflow)?;
-            let position_reward = reward_per_epoch
-                .checked_mul(claimable_epochs as u128)
-                .ok_or(ErrorCode::MathOverflow)?;
-            if position_reward == 0 {
+            let elapsed_seconds = now
+                .min(position.lock_end_ts)
+                .checked_sub(position.lock_start_ts)
+                .ok_or(ErrorCode::MathOverflow)?
+                .max(0);
+            if duration_seconds <= 0 || elapsed_seconds <= 0 {
                 continue;
             }
-            total_reward = total_reward
-                .checked_add(position_reward)
+            let accrued = total_reward_for_position
+                .checked_mul(elapsed_seconds as u128)
+                .ok_or(ErrorCode::MathOverflow)?
+                .checked_div(duration_seconds as u128)
                 .ok_or(ErrorCode::MathOverflow)?;
-            total_epochs = total_epochs
-                .checked_add(claimable_epochs)
-                .ok_or(ErrorCode::MathOverflow)?;
-            positions_count = positions_count
-                .checked_add(1)
-                .ok_or(ErrorCode::MathOverflow)?;
-            position.last_claimed_epoch = last_claimed_epoch
-                .checked_add(claimable_epochs)
+            let claimed = position.accrued_owed as u128;
+            let claimable = accrued.saturating_sub(claimed);
+            if claimable == 0 {
+                continue;
+            }
+            total_claimable = total_claimable
+                .checked_add(claimable)
                 .ok_or(ErrorCode::MathOverflow)?;
         }
 
-        require!(total_reward > 0, ErrorCode::NothingToClaim);
         let remaining = config
             .mined_cap
             .checked_sub(config.mined_total)
             .ok_or(ErrorCode::EmissionDepleted)? as u128;
-        let final_reward = total_reward.min(remaining);
-        require!(final_reward > 0, ErrorCode::NothingToClaim);
-
-        let reward_u64 = u64::try_from(final_reward).map_err(|_| ErrorCode::MathOverflow)?;
+        let max_claimable = total_claimable.min(remaining);
+        require!(max_claimable > 0, ErrorCode::NothingToClaim);
+        require!(
+            (amount as u128) <= max_claimable,
+            ErrorCode::ClaimAmountTooLarge
+        );
+        let reward_u64 = amount;
 
         let signer_seeds: &[&[u8]] = &[VAULT_SEED, &[config.bumps.vault_authority]];
         token::mint_to(
@@ -491,12 +507,56 @@ pub mod pocm_vault_mining {
             .checked_add(reward_u64)
             .ok_or(ErrorCode::MathOverflow)?;
 
+        let mut remaining_amount = reward_u64 as u128;
+        for acc_info in ctx.remaining_accounts.iter() {
+            if remaining_amount == 0 {
+                break;
+            }
+            if acc_info.owner != &crate::ID || !acc_info.is_writable {
+                continue;
+            }
+            let mut position: Account<UserPosition> = Account::try_from(acc_info)?;
+            if position.owner != ctx.accounts.owner.key() {
+                continue;
+            }
+            if position.locked_amount == 0 || now <= position.lock_start_ts {
+                continue;
+            }
+            let total_reward_for_position = reward_for_duration(position.duration_days, config)?;
+            let duration_seconds = position
+                .lock_end_ts
+                .checked_sub(position.lock_start_ts)
+                .ok_or(ErrorCode::MathOverflow)?;
+            let elapsed_seconds = now
+                .min(position.lock_end_ts)
+                .checked_sub(position.lock_start_ts)
+                .ok_or(ErrorCode::MathOverflow)?
+                .max(0);
+            if duration_seconds <= 0 || elapsed_seconds <= 0 {
+                continue;
+            }
+            let accrued = total_reward_for_position
+                .checked_mul(elapsed_seconds as u128)
+                .ok_or(ErrorCode::MathOverflow)?
+                .checked_div(duration_seconds as u128)
+                .ok_or(ErrorCode::MathOverflow)?;
+            let claimed = position.accrued_owed as u128;
+            let claimable = accrued.saturating_sub(claimed);
+            if claimable == 0 {
+                continue;
+            }
+            let take = remaining_amount.min(claimable);
+            position.accrued_owed = position
+                .accrued_owed
+                .checked_add(u64::try_from(take).map_err(|_| ErrorCode::MathOverflow)?)
+                .ok_or(ErrorCode::MathOverflow)?;
+            remaining_amount = remaining_amount.saturating_sub(take);
+        }
+
         emit!(Claimed {
             owner: ctx.accounts.owner.key(),
-            epoch_index: current_epoch,
             reward: reward_u64,
-            epochs_claimed: total_epochs,
-            positions_claimed: positions_count,
+            positions_claimed: ctx.remaining_accounts.len() as u64,
         });
         Ok(())
     }
@@ -554,6 +614,8 @@ pub mod pocm_vault_mining {
             ),
             amount,
         )?;
+        let cfg = &mut ctx.accounts.config;
+        accrue_staking_rewards(cfg, amount)?;
         Ok(())
     }
 
@@ -1127,6 +1189,8 @@ pub struct Config {
     pub xp_boost_gold_bps: u16,
     pub xp_boost_diamond_bps: u16,
     pub total_staked_mind: u64,
+    pub staking_reward_per_weight: u128,
+    pub staking_reward_pending: u128,
     pub total_xp: u128,
     pub mind_reward_7d: u64,
     pub mind_reward_14d: u64,
@@ -1176,6 +1240,7 @@ pub struct StakingPosition {
     pub lock_end_ts: i64,
     pub duration_days: u16,
     pub xp_boost_bps: u16,
+    pub reward_debt: u128,
     pub last_claim_ts: i64,
     pub stake_index: u64,
     pub bump: u8,
@@ -1209,9 +1274,7 @@ pub struct Deposited {
 #[event]
 pub struct Claimed {
     pub owner: Pubkey,
-    pub epoch_index: u64,
     pub reward: u64,
-    pub epochs_claimed: u64,
     pub positions_claimed: u64,
 }
 
@@ -1381,6 +1444,47 @@ fn staking_weight(amount: u64, duration: u16, xp_boost_bps: u16) -> Result<u128>
         .ok_or(ErrorCode::MathOverflow.into())
 }
 
+fn accrue_staking_rewards(cfg: &mut Account<Config>, amount: u64) -> Result<()> {
+    if amount == 0 {
+        return Ok(());
+    }
+    if cfg.total_staked_mind == 0 {
+        cfg.staking_reward_pending = cfg
+            .staking_reward_pending
+            .checked_add(amount as u128)
+            .ok_or(ErrorCode::MathOverflow)?;
+        return Ok(());
+    }
+    let delta = (amount as u128)
+        .checked_mul(STAKING_REWARD_SCALE)
+        .ok_or(ErrorCode::MathOverflow)?
+        .checked_div(cfg.total_staked_mind as u128)
+        .ok_or(ErrorCode::MathOverflow)?;
+    cfg.staking_reward_per_weight = cfg
+        .staking_reward_per_weight
+        .checked_add(delta)
+        .ok_or(ErrorCode::MathOverflow)?;
+    Ok(())
+}
+
+fn apply_pending_staking_rewards(cfg: &mut Account<Config>) -> Result<()> {
+    if cfg.total_staked_mind == 0 || cfg.staking_reward_pending == 0 {
+        return Ok(());
+    }
+    let delta = cfg
+        .staking_reward_pending
+        .checked_mul(STAKING_REWARD_SCALE)
+        .ok_or(ErrorCode::MathOverflow)?
+        .checked_div(cfg.total_staked_mind as u128)
+        .ok_or(ErrorCode::MathOverflow)?;
+    cfg.staking_reward_per_weight = cfg
+        .staking_reward_per_weight
+        .checked_add(delta)
+        .ok_or(ErrorCode::MathOverflow)?;
+    cfg.staking_reward_pending = 0;
+    Ok(())
+}
+
 #[error_code]
 pub enum ErrorCode {
     #[msg("Invalid mining duration")]
@@ -1439,4 +1543,8 @@ pub enum ErrorCode {
     NoStakingRewards,
     #[msg("No staked tokens")]
     NoStakedTokens,
+    #[msg("Claim amount exceeds available rewards")]
+    ClaimAmountTooLarge,
+    #[msg("Staking vault balance too low")]
+    InsufficientVaultBalance,
 }

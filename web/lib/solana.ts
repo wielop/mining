@@ -181,6 +181,8 @@ export type DecodedConfig = {
   xpBoostGoldBps: number;
   xpBoostDiamondBps: number;
   totalStakedMind: BN;
+  stakingRewardPerWeight: BN;
+  stakingRewardPending: BN;
   totalXp: BN;
   mindReward7d: BN;
   mindReward14d: BN;
@@ -295,6 +297,9 @@ export async function fetchConfig(connection: Connection): Promise<DecodedConfig
   const xpBoostGoldBps = readU16();
   const xpBoostDiamondBps = readU16();
   const totalStakedMind = readU64();
+  const canReadStakingRewards = offset + 32 <= data.length;
+  const stakingRewardPerWeight = canReadStakingRewards ? readU128() : new BN(0);
+  const stakingRewardPending = canReadStakingRewards ? readU128() : new BN(0);
   const totalXp = readU128();
   const canReadRewards = offset + 24 <= data.length;
   const mindReward7d = canReadRewards ? readU64() : new BN(0);
@@ -337,6 +342,8 @@ export async function fetchConfig(connection: Connection): Promise<DecodedConfig
     xpBoostGoldBps,
     xpBoostDiamondBps,
     totalStakedMind,
+    stakingRewardPerWeight,
+    stakingRewardPending,
     totalXp,
     mindReward7d,
     mindReward14d,
@@ -445,6 +452,8 @@ function decodeConfigLegacy(data: Buffer): DecodedConfig {
     xpBoostGoldBps: 0,
     xpBoostDiamondBps: 0,
     totalStakedMind: zero,
+    stakingRewardPerWeight: zero,
+    stakingRewardPending: zero,
     totalXp: zero,
     mindReward7d: zero,
     mindReward14d: zero,

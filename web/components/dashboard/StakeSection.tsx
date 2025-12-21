@@ -1,15 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { STAKE_DURATIONS } from "@/components/dashboard/constants";
-import { formatDurationSeconds, formatTokenAmount, formatUnixTs } from "@/lib/format";
+import { formatTokenAmount, formatUnixTs, parseUiAmountToBase } from "@/lib/format";
 
-const STAKING_COOLDOWN_SECONDS = 7 * 86_400;
+const STAKING_REWARD_SCALE = 1_000_000_000_000_000_000n;
 
 function estimateStakeRewardParts(args: {
   amountBase: bigint;
@@ -52,6 +52,19 @@ export function StakeSection() {
   } = useDashboard();
 
   const totalWeighted = useMemo(() => (config ? BigInt(config.totalStakedMind.toString()) : 0n), [config]);
+  const rewardPerWeight = useMemo(
+    () => (config ? BigInt(config.stakingRewardPerWeight.toString()) : 0n),
+    [config]
+  );
+  const [claimAmounts, setClaimAmounts] = useState<Record<string, string>>({});
+
+  const stakingWeight = (amountBase: bigint, durationDays: number, boostBps: number) => {
+    const durationMult =
+      durationDays === 7 ? 10_000n : durationDays === 14 ? 11_000n : durationDays === 30 ? 12_500n : 15_000n;
+    const baseWeight = (amountBase * durationMult) / 10_000n;
+    const boostedWeight = (baseWeight * BigInt(10_000 + boostBps)) / 10_000n;
+    return boostedWeight;
+  };
   const stakeDisabledReason = useMemo(() => {
     if (!publicKey) return "Connect wallet.";
     if (!config) return "Config loading.";
@@ -157,22 +170,34 @@ export function StakeSection() {
                         vaultBase: stakingVaultXntBalanceBase,
                       })
                     : null;
-                const claimReady =
-                  nowTs != null && nowTs >= stake.data.lastClaimTs + STAKING_COOLDOWN_SECONDS;
-                const nextClaimIn =
-                  nowTs != null
-                    ? Math.max(0, stake.data.lastClaimTs + STAKING_COOLDOWN_SECONDS - nowTs)
-                    : null;
                 const unlocked = nowTs != null && nowTs >= lockEndTs;
                 const claimLabel = `claim-stake-${stake.pubkey}`;
                 const withdrawLabel = `withdraw-stake-${stake.pubkey}`;
-                const claimDisabledReason = claimReady
-                  ? null
+                const weight = stakingWeight(amount, stake.data.durationDays, stake.data.xpBoostBps);
+                const accrued = rewardPerWeight > 0n && weight > 0n
+                  ? (weight * rewardPerWeight) / STAKING_REWARD_SCALE
+                  : 0n;
+                const claimableBase = accrued > stake.data.rewardDebt ? accrued - stake.data.rewardDebt : 0n;
+                const claimAmountUi = claimAmounts[stake.pubkey] ?? "";
+                const claimAmountBase = (() => {
+                  if (!config) return 0n;
+                  try {
+                    return parseUiAmountToBase(claimAmountUi, config.xntDecimals);
+                  } catch {
+                    return 0n;
+                  }
+                })();
+                const claimDisabledReason = !publicKey
+                  ? "Connect wallet."
                   : busy
                     ? "Transaction pending."
-                    : !publicKey
-                      ? "Connect wallet."
-                      : "Claim available once per 7 days.";
+                    : claimableBase <= 0n
+                      ? "Nothing accrued yet."
+                      : claimAmountBase <= 0n
+                        ? "Enter claim amount."
+                        : claimAmountBase > claimableBase
+                          ? "Amount exceeds accrued rewards."
+                          : null;
                 const withdrawDisabledReason = unlocked
                   ? null
                   : busy
@@ -194,9 +219,11 @@ export function StakeSection() {
                       Ends: <span className="font-mono text-zinc-200">{formatUnixTs(lockEndTs)}</span>
                     </div>
                     <div className="mt-2 text-xs text-zinc-400">
-                      Next claim:{" "}
+                      Claimable now:{" "}
                       <span className="font-mono text-zinc-200">
-                        {claimReady ? "ready" : nextClaimIn != null ? formatDurationSeconds(nextClaimIn) : "—"}
+                        {config
+                          ? `${formatTokenAmount(claimableBase > 0n ? claimableBase : 0n, config.xntDecimals, 4)} XNT`
+                          : "—"}
                       </span>
                     </div>
                     <div className="mt-2 text-xs text-zinc-400">
@@ -208,10 +235,38 @@ export function StakeSection() {
                       </span>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
+                      <Input
+                        value={claimAmountUi}
+                        onChange={(value) =>
+                          setClaimAmounts((prev) => ({ ...prev, [stake.pubkey]: value }))
+                        }
+                        placeholder="Claim amount (XNT)"
+                        disabled={busy !== null}
+                        right={
+                          <button
+                            type="button"
+                            className="rounded-full border border-cyan-300/30 px-2 py-1 text-[10px] text-cyan-100"
+                            onClick={() =>
+                              config &&
+                              setClaimAmounts((prev) => ({
+                                ...prev,
+                                [stake.pubkey]: formatTokenAmount(
+                                  claimableBase > 0n ? claimableBase : 0n,
+                                  config.xntDecimals,
+                                  config.xntDecimals
+                                ),
+                              }))
+                            }
+                            disabled={!config || claimableBase <= 0n}
+                          >
+                            Max
+                          </button>
+                        }
+                      />
                       <Button
                         size="sm"
-                        onClick={() => void onClaimStake(stake).catch(() => null)}
-                        disabled={busy !== null || !claimReady}
+                        onClick={() => void onClaimStake(stake, claimAmountBase).catch(() => null)}
+                        disabled={!!claimDisabledReason}
                       >
                         {busy === claimLabel ? "Submitting…" : "Claim"}
                       </Button>
