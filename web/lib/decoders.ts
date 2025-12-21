@@ -106,6 +106,20 @@ export function decodeUserEpochAccount(data: Buffer): DecodedUserEpoch {
 export function decodeUserProfileAccount(data: Buffer): DecodedUserProfile {
   // discriminator (8) + owner(32) + next_position_index(u64) + next_stake_index(u64) +
   // mining_xp(u64) + xp_tier(u8) + xp_boost_bps(u16) + bump(u8)
+  if (data.length === 49) {
+    let offset = 8;
+    const owner = data.subarray(offset, offset + 32);
+    offset += 32;
+    const nextPositionIndex = data.readBigUInt64LE(offset);
+    return {
+      owner,
+      nextPositionIndex,
+      nextStakeIndex: 0n,
+      miningXp: 0n,
+      xpTier: 0,
+      xpBoostBps: 0,
+    };
+  }
   assertMinLen(data, 8 + 32 + 8 + 8 + 8 + 1 + 2 + 1, "UserProfile");
   let offset = 8;
   const owner = data.subarray(offset, offset + 32);
