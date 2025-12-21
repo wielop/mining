@@ -281,61 +281,6 @@
           }
         },
         {
-          "name": "epoch_state",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  101,
-                  112,
-                  111,
-                  99,
-                  104
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "epoch_state.epoch_index",
-                "account": "EpochState"
-              }
-            ]
-          }
-        },
-        {
-          "name": "user_epoch",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  117,
-                  115,
-                  101,
-                  114,
-                  95,
-                  101,
-                  112,
-                  111,
-                  99,
-                  104
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "owner"
-              },
-              {
-                "kind": "account",
-                "path": "user_epoch.epoch_index",
-                "account": "UserEpoch"
-              }
-            ]
-          }
-        },
-        {
           "name": "mind_mint",
           "writable": true
         },
@@ -1779,12 +1724,12 @@
             "type": "u64"
           },
           {
-            "name": "capped_user_mp",
-            "type": "u128"
+            "name": "epochs_claimed",
+            "type": "u64"
           },
           {
-            "name": "total_epoch_mp",
-            "type": "u128"
+            "name": "positions_claimed",
+            "type": "u64"
           }
         ]
       }

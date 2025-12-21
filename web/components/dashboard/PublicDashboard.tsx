@@ -30,9 +30,7 @@ import { useToast } from "@/components/shared/ToastProvider";
 import { getProgram } from "@/lib/anchor";
 import {
   deriveConfigPda,
-  deriveEpochPda,
   deriveStakingPositionPda,
-  deriveUserEpochPda,
   deriveUserProfilePda,
   derivePositionPdaV2,
   deriveVaultPda,
@@ -43,9 +41,7 @@ import {
   getProgramId,
 } from "@/lib/solana";
 import {
-  decodeEpochStateAccount,
   decodeStakingPositionAccount,
-  decodeUserEpochAccount,
   decodeUserPositionAccount,
   decodeUserProfileAccount,
 } from "@/lib/decoders";
@@ -55,11 +51,6 @@ import { formatError } from "@/lib/formatError";
 function safeBigintToNumber(value: bigint): number {
   if (value > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error("Amount is too large");
   return Number(value);
-}
-
-function formatEpochCountdown(seconds: number) {
-  if (!Number.isFinite(seconds) || seconds <= 0) return "now";
-  return formatDurationSeconds(seconds);
 }
 
 function planFeeBase(durationDays: 7 | 14 | 30, decimals: number): bigint {
@@ -74,22 +65,15 @@ function formatBps(bps: number) {
   return `${percent % 1 === 0 ? percent.toFixed(0) : percent.toFixed(2)}%`;
 }
 
-function computeEstimatedReward(args: {
-  dailyEmission: bigint;
-  totalEffectiveMp: bigint;
-  userMp: bigint;
-  mpCapBpsPerWallet: number;
-  minedCap: bigint;
-  minedTotal: bigint;
-}) {
-  const { dailyEmission, totalEffectiveMp, userMp, mpCapBpsPerWallet, minedCap, minedTotal } = args;
-  if (totalEffectiveMp <= 0n) return 0n;
-  const capPortion = (totalEffectiveMp * BigInt(mpCapBpsPerWallet)) / 10_000n;
-  const cappedUserMp = userMp < capPortion ? userMp : capPortion;
-  if (cappedUserMp <= 0n) return 0n;
-  const reward = (dailyEmission * cappedUserMp) / totalEffectiveMp;
-  const remaining = minedCap > minedTotal ? minedCap - minedTotal : 0n;
-  return reward < remaining ? reward : remaining;
+function rewardForDurationBase(durationDays: 7 | 14 | 28 | 30, mindDecimals: number) {
+  const base = 10n ** BigInt(mindDecimals);
+  if (durationDays === 7) return base * 100n;
+  if (durationDays === 14) return base * 225n;
+  return base * 500n;
+}
+
+function rewardPerEpochBase(durationDays: 7 | 14 | 28 | 30, mindDecimals: number) {
+  return rewardForDurationBase(durationDays, mindDecimals) / BigInt(durationDays);
 }
 
 const XP_TIER_LABELS = ["Bronze", "Silver", "Gold", "Diamond"] as const;
@@ -115,12 +99,6 @@ export function PublicDashboard() {
   const [stakingVaultXntBalanceBase, setStakingVaultXntBalanceBase] = useState<bigint | null>(null);
   const [stakingVaultMindBalanceUi, setStakingVaultMindBalanceUi] = useState<string | null>(null);
   const [rewardPoolHistory, setRewardPoolHistory] = useState<Array<{ ts: number; amount: bigint }>>([]);
-  const [unclaimedEpochs, setUnclaimedEpochs] = useState<
-    Array<{ epochIndex: bigint; pubkey: string }>
-  >([]);
-
-  const [epochState, setEpochState] = useState<ReturnType<typeof decodeEpochStateAccount> | null>(null);
-  const [userEpoch, setUserEpoch] = useState<ReturnType<typeof decodeUserEpochAccount> | null>(null);
   const [userProfile, setUserProfile] = useState<ReturnType<typeof decodeUserProfileAccount> | null>(null);
 
   const [durationDays, setDurationDays] = useState<7 | 14 | 30>(14);
@@ -159,13 +137,6 @@ export function PublicDashboard() {
 
   const anyActive = activePositions.length > 0;
 
-  const heartbeatDone = useMemo(() => {
-    if (!userEpoch || currentEpoch == null) return false;
-    return userEpoch.epochIndex === BigInt(currentEpoch);
-  }, [userEpoch, currentEpoch]);
-
-  const claimed = !!userEpoch?.claimed;
-
   const refresh = useCallback(async () => {
     setError(null);
     setLoading(true);
@@ -201,9 +172,6 @@ export function PublicDashboard() {
         setMindBalanceUi(null);
         setMindBalanceBase(0n);
         setStakingVaultXntBalanceBase(null);
-        setUnclaimedEpochs([]);
-        setEpochState(null);
-        setUserEpoch(null);
         setUserProfile(null);
         return;
       }
@@ -245,28 +213,6 @@ export function PublicDashboard() {
 
       setUserProfile(profileAcc?.data ? decodeUserProfileAccount(Buffer.from(profileAcc.data)) : null);
 
-      try {
-        const userEpochGpa = await connection.getProgramAccounts(programId, {
-          commitment: "confirmed",
-          filters: [
-            { dataSize: 66 },
-            { memcmp: { offset: 8, bytes: publicKey.toBase58() } },
-          ],
-        });
-        const decodedEpochs = userEpochGpa
-          .map((a) => ({
-            pubkey: a.pubkey.toBase58(),
-            data: decodeUserEpochAccount(Buffer.from(a.account.data)),
-          }))
-          .filter((e) => !e.data.claimed)
-          .sort((a, b) => Number(a.data.epochIndex - b.data.epochIndex));
-        setUnclaimedEpochs(
-          decodedEpochs.map((e) => ({ epochIndex: e.data.epochIndex, pubkey: e.pubkey }))
-        );
-      } catch {
-        setUnclaimedEpochs([]);
-      }
-
       const xntMint = cfg.xntMint;
       if (xntMint.equals(NATIVE_MINT)) {
         const lamports = await connection.getBalance(publicKey, "confirmed");
@@ -287,15 +233,6 @@ export function PublicDashboard() {
         setMindBalanceUi("0");
       }
 
-      const epoch = getCurrentEpochFrom(cfg, ts);
-      const epochStatePda = deriveEpochPda(epoch);
-      const userEpochPda = deriveUserEpochPda(publicKey, epoch);
-      const [epochAcc, userAcc] = await Promise.all([
-        connection.getAccountInfo(epochStatePda, "confirmed"),
-        connection.getAccountInfo(userEpochPda, "confirmed"),
-      ]);
-      setEpochState(epochAcc?.data ? decodeEpochStateAccount(Buffer.from(epochAcc.data)) : null);
-      setUserEpoch(userAcc?.data ? decodeUserEpochAccount(Buffer.from(userAcc.data)) : null);
     } catch (e: unknown) {
       console.error(e);
       setError(formatError(e));
@@ -478,15 +415,6 @@ export function PublicDashboard() {
 
     setBusy("buy");
     try {
-      if (heartbeatDone && nextEpochCountdown) {
-        pushToast({
-          title: "Heads up",
-          description: `You already heartbeated this epoch. This miner starts earning ${nextEpochCountdown.label} ${formatEpochCountdown(
-            nextEpochCountdown.seconds
-          )}.`,
-          variant: "info",
-        });
-      }
       await withTx("Buy mining position", async () => {
         const program = getProgram(connection, anchorWallet);
         const tx = new Transaction();
@@ -563,37 +491,39 @@ export function PublicDashboard() {
     }
   };
 
-  const onHeartbeat = async () => {
+  const onClaim = async () => {
     if (!publicKey) throw new Error("Connect a wallet first");
     if (!anchorWallet) throw new Error("Wallet is not ready for Anchor");
     if (!config) throw new Error("Config not loaded");
     if (busy) return;
-    if (!anyActive) throw new Error("Deposit first");
-    const epoch = currentEpoch;
-    if (epoch == null) throw new Error("Epoch not available");
-    if (heartbeatDone) throw new Error("Heartbeat already recorded for this epoch");
+    if (!positions.some((p) => p.data.lockedAmount > 0n)) throw new Error("No miners found");
 
-    setBusy("heartbeat");
+    setBusy("claim");
     try {
-      await withTx("Heartbeat", async () => {
+      await withTx("Claim", async () => {
         const program = getProgram(connection, anchorWallet);
-        const epochStatePda = deriveEpochPda(epoch);
-        const userEpochPda = deriveUserEpochPda(publicKey, epoch);
+        const vaultAuthority = deriveVaultPda();
+        const userMindAta = getAssociatedTokenAddressSync(config.mindMint, publicKey);
         const ix = await program.methods
-          .heartbeat(new BN(epoch))
+          .claim()
           .accounts({
             owner: publicKey,
             config: deriveConfigPda(),
-            epochState: epochStatePda,
-            userEpoch: userEpochPda,
+            vaultAuthority,
+            mindMint: config.mindMint,
+            userMindAta,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
           .remainingAccounts(
-            activePositions.map((p) => ({
-              pubkey: new PublicKey(p.pubkey),
-              isSigner: false,
-              isWritable: false,
-            }))
+            positions
+              .filter((p) => p.data.lockedAmount > 0n)
+              .map((p) => ({
+                pubkey: new PublicKey(p.pubkey),
+                isSigner: false,
+                isWritable: true,
+              }))
           )
           .instruction();
         const tx = new Transaction().add(ix);
@@ -603,48 +533,6 @@ export function PublicDashboard() {
       setBusy(null);
     }
   };
-
-  const onClaim = async () => {
-    if (!publicKey) throw new Error("Connect a wallet first");
-    if (!anchorWallet) throw new Error("Wallet is not ready for Anchor");
-    if (!config) throw new Error("Config not loaded");
-    if (busy) return;
-    if (!anyActive) throw new Error("Deposit first");
-    if (!heartbeatDone) throw new Error("Heartbeat required");
-    if (claimed) throw new Error("Already claimed for this epoch");
-    const epoch = currentEpoch;
-    if (epoch == null) throw new Error("Epoch not available");
-
-    setBusy("claim");
-    try {
-      await withTx("Claim", async () => {
-        const program = getProgram(connection, anchorWallet);
-        const epochStatePda = deriveEpochPda(epoch);
-        const userEpochPda = deriveUserEpochPda(publicKey, epoch);
-        const vaultAuthority = deriveVaultPda();
-        const userMindAta = getAssociatedTokenAddressSync(config.mindMint, publicKey);
-        const ix = await program.methods
-          .claim()
-          .accounts({
-            owner: publicKey,
-            config: deriveConfigPda(),
-            vaultAuthority,
-            epochState: epochStatePda,
-            userEpoch: userEpochPda,
-            mindMint: config.mindMint,
-            userMindAta,
-            tokenProgram: TOKEN_PROGRAM_ID,
-            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
-          })
-          .instruction();
-      const tx = new Transaction().add(ix);
-      return await signAndSend(tx);
-    });
-  } finally {
-    setBusy(null);
-  }
-};
 
 const onStake = async () => {
   if (!publicKey) throw new Error("Connect a wallet first");
@@ -801,60 +689,21 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
     }
   };
 
-  const onClaimAll = async () => {
-    if (!publicKey) throw new Error("Connect a wallet first");
-    if (!anchorWallet) throw new Error("Wallet is not ready for Anchor");
-    if (!config) throw new Error("Config not loaded");
-    if (busy) return;
-    if (unclaimedEpochs.length === 0) throw new Error("No unclaimed epochs");
-
-    setBusy("claim-all");
-    try {
-      await withTx("Claim all epochs", async () => {
-        const program = getProgram(connection, anchorWallet);
-        const vaultAuthority = deriveVaultPda();
-        const userMindAta = getAssociatedTokenAddressSync(config.mindMint, publicKey);
-        let lastSig = "";
-        for (const epoch of unclaimedEpochs) {
-          const epochIndex = Number(epoch.epochIndex);
-          const epochStatePda = deriveEpochPda(epochIndex);
-          const userEpochPda = new PublicKey(epoch.pubkey);
-          const ix = await program.methods
-            .claim()
-            .accounts({
-              owner: publicKey,
-              config: deriveConfigPda(),
-              vaultAuthority,
-              epochState: epochStatePda,
-              userEpoch: userEpochPda,
-              mindMint: config.mindMint,
-              userMindAta,
-              tokenProgram: TOKEN_PROGRAM_ID,
-              associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-              systemProgram: SystemProgram.programId,
-            })
-            .instruction();
-          const tx = new Transaction().add(ix);
-          lastSig = await signAndSend(tx);
-        }
-        return lastSig || "";
-      });
-    } finally {
-      setBusy(null);
-    }
-  };
-
   const estimatedRewardBase = useMemo(() => {
-    if (!config || !epochState || !userEpoch) return null;
-    return computeEstimatedReward({
-      dailyEmission: epochState.dailyEmission,
-      totalEffectiveMp: epochState.totalEffectiveMp,
-      userMp: userEpoch.userMp,
-      mpCapBpsPerWallet: config.mpCapBpsPerWallet,
-      minedCap: BigInt(config.minedCap.toString()),
-      minedTotal: BigInt(config.minedTotal.toString()),
-    });
-  }, [config, epochState, userEpoch]);
+    if (!config) return null;
+    const total = activePositions.reduce((acc, position) => {
+      if (
+        position.data.durationDays !== 7 &&
+        position.data.durationDays !== 14 &&
+        position.data.durationDays !== 28 &&
+        position.data.durationDays !== 30
+      ) {
+        return acc;
+      }
+      return acc + rewardPerEpochBase(position.data.durationDays, config.mindDecimals);
+    }, 0n);
+    return total > 0n ? total : null;
+  }, [activePositions, config]);
 
   const xpStats = useMemo(() => {
     if (!config || !userProfile) return null;
@@ -921,12 +770,8 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
       setDurationDays,
       planOptions,
       emissionNotStarted,
-      heartbeatDone,
-      claimed,
       onDeposit,
-      onHeartbeat,
       onClaim,
-      onClaimAll,
       onClosePosition,
       onStake,
       onClaimStake,
@@ -952,13 +797,11 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
       userProfile,
       xpStats,
       rewardPoolSeries,
-      unclaimedEpochs,
     }),
     [
       activePositions,
       anyActive,
       busy,
-      claimed,
       config,
       currentEpoch,
       durationDays,
@@ -966,7 +809,6 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
       estimatedRewardBase,
       error,
       handleStakeMax,
-      heartbeatDone,
       lastSig,
       loading,
       mindBalanceBase,
@@ -974,11 +816,9 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
       nextEpochCountdown,
       nowTs,
       onClaim,
-      onClaimAll,
       onClaimStake,
       onClosePosition,
       onDeposit,
-      onHeartbeat,
       onStake,
       onWithdrawStake,
       planOptions,
@@ -993,7 +833,6 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
       stakingVaultMindBalanceUi,
       stakingVaultXntBalanceBase,
       stakingVaultXntBalanceUi,
-      unclaimedEpochs,
       userProfile,
       xpStats,
       xntBalanceUi,
@@ -1029,7 +868,7 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
               </div>
               <div className="rounded-2xl border border-white/5 bg-white/5 p-3">
                 <div className="text-xs text-zinc-400">2</div>
-                <div className="mt-1 font-semibold text-white">Heartbeat every epoch</div>
+                <div className="mt-1 font-semibold text-white">Claim MIND each epoch</div>
               </div>
               <div className="rounded-2xl border border-white/5 bg-white/5 p-3">
                 <div className="text-xs text-zinc-400">3</div>

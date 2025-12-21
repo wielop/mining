@@ -5,43 +5,70 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { formatDurationSeconds, formatTokenAmount, formatUnixTs } from "@/lib/format";
+import { getCurrentEpochFrom } from "@/lib/solana";
 
 export function MiningActivityPanel() {
   const {
     config,
     activePositions,
+    positions,
     nowTs,
     busy,
     publicKey,
-    heartbeatDone,
-    claimed,
-    onHeartbeat,
     onClaim,
     nextEpochCountdown,
     estimatedRewardBase,
+    currentEpoch,
   } = useDashboard();
 
-  const heartbeatDisabledReason = !publicKey
-    ? "Connect wallet."
-    : !activePositions.length
-      ? "No active miners."
-      : heartbeatDone
-        ? "Already done."
-        : busy
-          ? "Transaction pending."
-          : null;
+  const rewardForDurationBase = (durationDays: number) => {
+    if (!config) return null;
+    const base = 10n ** BigInt(config.mindDecimals);
+    if (durationDays === 7) return base * 100n;
+    if (durationDays === 14) return base * 225n;
+    if (durationDays === 28 || durationDays === 30) return base * 500n;
+    return null;
+  };
+
+  const rewardPerEpochBase = (durationDays: number) => {
+    const total = rewardForDurationBase(durationDays);
+    if (total == null || durationDays <= 0) return null;
+    return total / BigInt(durationDays);
+  };
+
+  const claimableForPosition = (durationDays: number, lockStartTs: number, lockEndTs: number, lastClaimedEpoch: bigint) => {
+    if (!config || currentEpoch == null || currentEpoch < 0) return 0;
+    const startEpoch = getCurrentEpochFrom(config, lockStartTs);
+    const endEpoch = getCurrentEpochFrom(config, lockEndTs);
+    const effectiveLast = Math.max(Number(lastClaimedEpoch), startEpoch);
+    const cappedNow = Math.min(currentEpoch, endEpoch);
+    return Math.max(0, cappedNow - effectiveLast);
+  };
+
+  const claimablePositions = positions.filter((pos) => pos.data.lockedAmount > 0n);
+  const claimableTotalBase = claimablePositions.reduce((acc, pos) => {
+    const perEpoch = rewardPerEpochBase(pos.data.durationDays);
+    if (perEpoch == null) return acc;
+    const epochs = claimableForPosition(
+      pos.data.durationDays,
+      pos.data.lockStartTs,
+      pos.data.lockEndTs,
+      pos.data.lastClaimedEpoch
+    );
+    return acc + perEpoch * BigInt(epochs);
+  }, 0n);
 
   const claimDisabledReason = !publicKey
     ? "Connect wallet."
-    : !activePositions.length
-      ? "No active miners."
-      : !heartbeatDone
-        ? "Heartbeat required."
-        : claimed
-          ? "Already claimed."
-          : busy
-            ? "Transaction pending."
-            : null;
+    : !config || currentEpoch == null
+      ? "Epoch data unavailable."
+    : !claimablePositions.length
+      ? "No miners."
+      : claimableTotalBase <= 0n
+        ? "Nothing accrued yet."
+        : busy
+          ? "Transaction pending."
+          : null;
 
   const sortedMiners = [...activePositions].sort((a, b) =>
     a.data.lockedAmount > b.data.lockedAmount ? -1 : a.data.lockedAmount < b.data.lockedAmount ? 1 : 0
@@ -100,16 +127,8 @@ export function MiningActivityPanel() {
               {visibleMiners.map((pos) => {
               const remaining =
                 nowTs != null ? Math.max(0, pos.data.lockEndTs - nowTs) : null;
-              const perMinerDaily =
-                estimatedRewardBase != null && activePositions.length > 0
-                  ? estimatedRewardBase / BigInt(activePositions.length)
-                  : null;
-              const remainingDays =
-                remaining != null ? BigInt(Math.max(1, Math.ceil(remaining / 86_400))) : null;
-              const totalRemaining =
-                perMinerDaily != null && remainingDays != null
-                  ? perMinerDaily * remainingDays
-                  : null;
+              const perMinerDaily = rewardPerEpochBase(pos.data.durationDays);
+              const totalReward = rewardForDurationBase(pos.data.durationDays);
               return (
                 <div
                   key={pos.pubkey}
@@ -154,8 +173,8 @@ export function MiningActivityPanel() {
                   <div className="mt-1 text-xs text-zinc-400">
                     Est. total{" "}
                     <span className="font-mono text-zinc-200">
-                      {config && totalRemaining != null
-                        ? `${formatTokenAmount(totalRemaining, config.mindDecimals, 4)} MIND`
+                      {config && totalReward != null
+                        ? `${formatTokenAmount(totalReward, config.mindDecimals, 4)} MIND`
                         : "—"}
                     </span>
                   </div>
@@ -171,16 +190,8 @@ export function MiningActivityPanel() {
                     {extraMiners.map((pos) => {
                       const remaining =
                         nowTs != null ? Math.max(0, pos.data.lockEndTs - nowTs) : null;
-                      const perMinerDaily =
-                        estimatedRewardBase != null && activePositions.length > 0
-                          ? estimatedRewardBase / BigInt(activePositions.length)
-                          : null;
-                      const remainingDays =
-                        remaining != null ? BigInt(Math.max(1, Math.ceil(remaining / 86_400))) : null;
-                      const totalRemaining =
-                        perMinerDaily != null && remainingDays != null
-                          ? perMinerDaily * remainingDays
-                          : null;
+                      const perMinerDaily = rewardPerEpochBase(pos.data.durationDays);
+                      const totalReward = rewardForDurationBase(pos.data.durationDays);
                       return (
                         <div
                           key={pos.pubkey}
@@ -217,8 +228,8 @@ export function MiningActivityPanel() {
                           <div className="mt-1 text-xs text-zinc-400">
                             Est. total{" "}
                             <span className="font-mono text-zinc-200">
-                              {config && totalRemaining != null
-                                ? `${formatTokenAmount(totalRemaining, config.mindDecimals, 4)} MIND`
+                              {config && totalReward != null
+                                ? `${formatTokenAmount(totalReward, config.mindDecimals, 4)} MIND`
                                 : "—"}
                             </span>
                           </div>
@@ -282,22 +293,18 @@ export function MiningActivityPanel() {
           <div className="mt-4 grid gap-3">
             <Button
               size="lg"
-              onClick={() => void onHeartbeat().catch(() => null)}
-              disabled={!!heartbeatDisabledReason}
-            >
-              {busy === "heartbeat" ? "Submitting…" : "HEARTBEAT"}
-            </Button>
-            {heartbeatDisabledReason ? (
-              <div className="text-xs text-amber-200">{heartbeatDisabledReason}</div>
-            ) : null}
-            <Button
-              size="lg"
-              variant={heartbeatDone && !claimed ? "primary" : "secondary"}
+              variant="primary"
               onClick={() => void onClaim().catch(() => null)}
               disabled={!!claimDisabledReason}
             >
               {busy === "claim" ? "Submitting…" : "CLAIM"}
             </Button>
+            <div className="text-xs text-zinc-400">
+              Claimable now{" "}
+              <span className="font-mono text-zinc-200">
+                {config ? `${formatTokenAmount(claimableTotalBase, config.mindDecimals, 4)} MIND` : "—"}
+              </span>
+            </div>
             {claimDisabledReason ? (
               <div className="text-xs text-amber-200">{claimDisabledReason}</div>
             ) : null}

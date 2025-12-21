@@ -2,7 +2,7 @@
 
 Public app (Vercel-ready) for interacting with the on-chain program:
 
-- Public panel: `/` (create position, deposit, heartbeat, claim)
+- Public panel: `/` (create position, deposit, claim)
 - Admin panel: `/admin` (admin_update_config)
 
 ## Env vars (Vercel)

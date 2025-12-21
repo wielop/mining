@@ -4,6 +4,9 @@ export type DecodedPosition = {
   lockEndTs: number;
   durationDays: number;
   timeMultiplierBps: number;
+  lastActiveEpoch: bigint;
+  accruedOwed: bigint;
+  lastClaimedEpoch: bigint;
 };
 
 export type DecodedEpochState = {
@@ -68,7 +71,22 @@ export function decodeUserPositionAccount(data: Buffer): DecodedPosition {
   const durationDays = data.readUInt16LE(offset);
   offset += 2;
   const timeMultiplierBps = data.readUInt16LE(offset);
-  return { lockedAmount, lockStartTs, lockEndTs, durationDays, timeMultiplierBps };
+  offset += 2;
+  const lastActiveEpoch = data.readBigUInt64LE(offset);
+  offset += 8;
+  const accruedOwed = data.readBigUInt64LE(offset);
+  offset += 8;
+  const lastClaimedEpoch = data.readBigUInt64LE(offset);
+  return {
+    lockedAmount,
+    lockStartTs,
+    lockEndTs,
+    durationDays,
+    timeMultiplierBps,
+    lastActiveEpoch,
+    accruedOwed,
+    lastClaimedEpoch,
+  };
 }
 
 export function decodeEpochStateAccount(data: Buffer): DecodedEpochState {

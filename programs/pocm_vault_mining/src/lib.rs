@@ -191,6 +191,7 @@ pub mod pocm_vault_mining {
             SECONDS_PER_DAY
         };
         let now = Clock::get()?.unix_timestamp;
+        let current_epoch = epoch_index_for_ts(cfg, now)?;
         let lock_duration = (position.duration_days as i64)
             .checked_mul(lock_day_seconds)
             .ok_or(ErrorCode::MathOverflow)?;
@@ -232,6 +233,7 @@ pub mod pocm_vault_mining {
         position.lock_end_ts = now
             .checked_add(lock_duration)
             .ok_or(ErrorCode::MathOverflow)?;
+        position.last_claimed_epoch = current_epoch;
 
         let xp_gain = xp_for_duration(position.duration_days, cfg)?;
         apply_mining_xp(&mut ctx.accounts.user_profile, cfg, xp_gain)?;
@@ -486,34 +488,69 @@ pub mod pocm_vault_mining {
 
     pub fn claim(ctx: Context<Claim>) -> Result<()> {
         let config = &mut ctx.accounts.config;
-        let epoch_state = &ctx.accounts.epoch_state;
-        let user_epoch = &mut ctx.accounts.user_epoch;
-        require_keys_eq!(
-            user_epoch.owner,
-            ctx.accounts.owner.key(),
-            ErrorCode::Unauthorized
-        );
-        require!(!user_epoch.claimed, ErrorCode::AlreadyClaimed);
-        require!(epoch_state.total_effective_mp > 0, ErrorCode::NoEpochPower);
+        let now = Clock::get()?.unix_timestamp;
+        let current_epoch = epoch_index_for_ts(config, now)?;
+        let mut total_reward: u128 = 0;
+        let mut total_epochs: u64 = 0;
+        let mut positions_count: u64 = 0;
 
-        let cap_portion = (epoch_state.total_effective_mp)
-            .checked_mul(config.mp_cap_bps_per_wallet as u128)
-            .ok_or(ErrorCode::MathOverflow)?
-            .checked_div(BPS_DENOMINATOR)
-            .ok_or(ErrorCode::MathOverflow)?;
-        let capped_user_mp = user_epoch.user_mp.min(cap_portion);
-        require!(capped_user_mp > 0, ErrorCode::ZeroMiningPower);
+        for acc_info in ctx.remaining_accounts.iter() {
+            if acc_info.owner != &crate::ID || !acc_info.is_writable {
+                continue;
+            }
+            let mut position: Account<UserPosition> = Account::try_from(acc_info)?;
+            if position.owner != ctx.accounts.owner.key() {
+                continue;
+            }
+            if position.locked_amount == 0 {
+                continue;
+            }
+            if now < position.lock_start_ts {
+                continue;
+            }
+            let start_epoch = epoch_index_for_ts(config, position.lock_start_ts)?;
+            let end_epoch = epoch_index_for_ts(config, position.lock_end_ts)?;
+            let last_claimed_epoch = position.last_claimed_epoch.max(start_epoch);
+            if last_claimed_epoch >= end_epoch {
+                continue;
+            }
+            let claimable_epochs = current_epoch
+                .min(end_epoch)
+                .saturating_sub(last_claimed_epoch);
+            if claimable_epochs == 0 {
+                continue;
+            }
+            let total_reward_for_position =
+                reward_for_duration(position.duration_days, config.mind_decimals)?;
+            let reward_per_epoch = total_reward_for_position
+                .checked_div(position.duration_days as u128)
+                .ok_or(ErrorCode::MathOverflow)?;
+            let position_reward = reward_per_epoch
+                .checked_mul(claimable_epochs as u128)
+                .ok_or(ErrorCode::MathOverflow)?;
+            if position_reward == 0 {
+                continue;
+            }
+            total_reward = total_reward
+                .checked_add(position_reward)
+                .ok_or(ErrorCode::MathOverflow)?;
+            total_epochs = total_epochs
+                .checked_add(claimable_epochs)
+                .ok_or(ErrorCode::MathOverflow)?;
+            positions_count = positions_count
+                .checked_add(1)
+                .ok_or(ErrorCode::MathOverflow)?;
+            position.last_claimed_epoch = last_claimed_epoch
+                .checked_add(claimable_epochs)
+                .ok_or(ErrorCode::MathOverflow)?;
+        }
 
-        let reward = (epoch_state.daily_emission as u128)
-            .checked_mul(capped_user_mp)
-            .ok_or(ErrorCode::MathOverflow)?
-            .checked_div(epoch_state.total_effective_mp)
-            .ok_or(ErrorCode::MathOverflow)?;
+        require!(total_reward > 0, ErrorCode::NothingToClaim);
         let remaining = config
             .mined_cap
             .checked_sub(config.mined_total)
             .ok_or(ErrorCode::EmissionDepleted)? as u128;
-        let final_reward = reward.min(remaining);
+        let final_reward = total_reward.min(remaining);
         require!(final_reward > 0, ErrorCode::NothingToClaim);
 
         let reward_u64 = u64::try_from(final_reward).map_err(|_| ErrorCode::MathOverflow)?;
@@ -532,7 +569,6 @@ pub mod pocm_vault_mining {
             reward_u64,
         )?;
 
-        user_epoch.claimed = true;
         config.mined_total = config
             .mined_total
             .checked_add(reward_u64)
@@ -540,10 +576,10 @@ pub mod pocm_vault_mining {
 
         emit!(Claimed {
             owner: ctx.accounts.owner.key(),
-            epoch_index: epoch_state.epoch_index,
+            epoch_index: current_epoch,
             reward: reward_u64,
-            capped_user_mp,
-            total_epoch_mp: epoch_state.total_effective_mp,
+            epochs_claimed: total_epochs,
+            positions_claimed: positions_count,
         });
         Ok(())
     }
@@ -984,20 +1020,6 @@ pub struct Claim<'info> {
     )]
     /// CHECK: PDA derived from VAULT_SEED/bump used as the vault authority
     pub vault_authority: UncheckedAccount<'info>,
-    #[account(
-        mut,
-        seeds = [EPOCH_SEED, epoch_state.epoch_index.to_le_bytes().as_ref()],
-        bump = epoch_state.bump,
-        constraint = epoch_state.epoch_index == user_epoch.epoch_index
-    )]
-    pub epoch_state: Account<'info, EpochState>,
-    #[account(
-        mut,
-        seeds = [USER_EPOCH_SEED, owner.key().as_ref(), user_epoch.epoch_index.to_le_bytes().as_ref()],
-        bump = user_epoch.bump,
-        constraint = user_epoch.owner == owner.key()
-    )]
-    pub user_epoch: Account<'info, UserEpoch>,
     #[account(mut, constraint = mind_mint.key() == config.mind_mint)]
     pub mind_mint: Account<'info, Mint>,
     #[account(
@@ -1312,8 +1334,8 @@ pub struct Claimed {
     pub owner: Pubkey,
     pub epoch_index: u64,
     pub reward: u64,
-    pub capped_user_mp: u128,
-    pub total_epoch_mp: u128,
+    pub epochs_claimed: u64,
+    pub positions_claimed: u64,
 }
 
 #[event]
@@ -1449,6 +1471,22 @@ fn xp_for_duration(duration_days: u16, cfg: &Config) -> Result<u64> {
         7 => Ok(cfg.xp_per_7d),
         14 => Ok(cfg.xp_per_14d),
         28 | 30 => Ok(cfg.xp_per_30d),
+        _ => err!(ErrorCode::InvalidDuration),
+    }
+}
+
+fn reward_for_duration(duration_days: u16, mind_decimals: u8) -> Result<u128> {
+    let base = ten_pow(mind_decimals)? as u128;
+    match duration_days {
+        7 => Ok(base
+            .checked_mul(100)
+            .ok_or(ErrorCode::MathOverflow)?),
+        14 => Ok(base
+            .checked_mul(225)
+            .ok_or(ErrorCode::MathOverflow)?),
+        28 | 30 => Ok(base
+            .checked_mul(500)
+            .ok_or(ErrorCode::MathOverflow)?),
         _ => err!(ErrorCode::InvalidDuration),
     }
 }

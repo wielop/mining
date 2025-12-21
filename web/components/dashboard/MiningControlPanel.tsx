@@ -29,7 +29,6 @@ export function MiningControlPanel() {
     onDeposit,
     onClosePosition,
     busy,
-    estimatedRewardBase,
     xntBalanceUi,
   } = useDashboard();
 
@@ -62,10 +61,13 @@ export function MiningControlPanel() {
     return null;
   }, [amountUi, busy, config, emissionNotStarted, publicKey, selectedPlan]);
 
-  const planRewardUi =
-    config && estimatedRewardBase != null
-      ? formatTokenAmount(estimatedRewardBase, config.mindDecimals, 4)
-      : null;
+  const rewardForDurationBase = (durationDays: 7 | 14 | 30) => {
+    if (!config) return null;
+    const base = 10n ** BigInt(config.mindDecimals);
+    if (durationDays === 7) return base * 100n;
+    if (durationDays === 14) return base * 225n;
+    return base * 500n;
+  };
 
   const withdrawDisabledReason = useMemo(() => {
     if (!publicKey) return "Connect wallet first.";
@@ -113,7 +115,22 @@ export function MiningControlPanel() {
                 </div>
                 <div className="mt-1 text-[11px] text-emerald-200">XP {opt.xp}</div>
                 <div className="mt-1 text-[11px] text-cyan-200">
-                  Est. {planRewardUi ?? "—"} MIND/epoch
+                  {config && rewardForDurationBase(opt.d)
+                    ? `${formatTokenAmount(
+                        rewardForDurationBase(opt.d) as bigint,
+                        config.mindDecimals,
+                        4
+                      )} MIND total`
+                    : "MIND —"}
+                </div>
+                <div className="mt-1 text-[11px] text-cyan-200">
+                  {config && rewardForDurationBase(opt.d)
+                    ? `${formatTokenAmount(
+                        (rewardForDurationBase(opt.d) as bigint) / BigInt(opt.d),
+                        config.mindDecimals,
+                        4
+                      )} MIND/epoch`
+                    : "MIND —/epoch"}
                 </div>
                 <div className="mt-2 text-xs text-cyan-200">{opt.price} XNT</div>
               </button>

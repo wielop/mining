@@ -58,7 +58,7 @@ export function SummaryCards() {
       <StatCard
         label="Current Epoch"
         value={currentEpoch == null ? "—" : String(currentEpoch)}
-        description="Heartbeat to stay active."
+        description="Claim MIND each epoch."
       />
       <StatCard
         label="Emission"

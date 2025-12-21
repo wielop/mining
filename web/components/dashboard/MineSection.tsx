@@ -12,10 +12,9 @@ export function MineSection() {
     positions,
     currentEpoch,
     nextEpochCountdown,
-    heartbeatDone,
-    claimed,
     nowTs,
   } = useDashboard();
+  const hasActive = nowTs != null && positions.some((p) => p.data.lockedAmount > 0n && nowTs < p.data.lockEndTs);
 
   return (
     <Card>
@@ -23,9 +22,7 @@ export function MineSection() {
         title="Mining Details"
         description="On-chain status and advanced protocol details."
         right={
-          <Badge variant={heartbeatDone ? "success" : claimed ? "muted" : "warning"}>
-            {claimed ? "claimed" : heartbeatDone ? "ready" : "heartbeat"}
-          </Badge>
+          <Badge variant={hasActive ? "success" : "muted"}>{hasActive ? "active" : "idle"}</Badge>
         }
       />
 

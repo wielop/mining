@@ -26,9 +26,7 @@ export type XpStats = {
 
 export type BusyAction =
   | "buy"
-  | "heartbeat"
   | "claim"
-  | "claim-all"
   | "close"
   | "stake"
   | `claim-stake-${string}`
@@ -48,12 +46,8 @@ export type DashboardContextValue = {
   setDurationDays: (v: 7 | 14 | 30) => void;
   planOptions: MiningPlanOption[];
   emissionNotStarted: boolean;
-  heartbeatDone: boolean;
-  claimed: boolean;
   onDeposit: () => Promise<void>;
-  onHeartbeat: () => Promise<void>;
   onClaim: () => Promise<void>;
-  onClaimAll: () => Promise<void>;
   onClosePosition: (pubkey: string) => Promise<void>;
   onStake: () => Promise<void>;
   onClaimStake: (stake: StakingPosition) => Promise<void>;
@@ -79,7 +73,6 @@ export type DashboardContextValue = {
   userProfile: ReturnType<typeof decodeUserProfileAccount> | null;
   xpStats: XpStats | null;
   rewardPoolSeries: { points: string; min: bigint; max: bigint } | null;
-  unclaimedEpochs: Array<{ epochIndex: bigint; pubkey: string }>;
 };
 
 const DashboardContext = createContext<DashboardContextValue | null>(null);
