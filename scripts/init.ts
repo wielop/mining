@@ -85,11 +85,27 @@ const main = async () => {
     TOKEN_PROGRAM_ID,
     ASSOCIATED_TOKEN_PROGRAM_ID
   );
+  const stakingVaultXntAta = getAssociatedTokenAddressSync(
+    xntMint,
+    vaultAuthority,
+    true,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID
+  );
+  const stakingVaultMindAta = getAssociatedTokenAddressSync(
+    mindMint.publicKey,
+    vaultAuthority,
+    true,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID
+  );
 
   console.log("Admin:", wallet.publicKey.toBase58());
   console.log("XNT mint:", xntMint.toBase58());
   console.log("MIND mint:", mindMint.publicKey.toBase58());
   console.log("Vault ATA:", vaultXntAta.toBase58());
+  console.log("Staking vault XNT ATA:", stakingVaultXntAta.toBase58());
+  console.log("Staking vault MIND ATA:", stakingVaultMindAta.toBase58());
 
   // Ensure MIND mint exists and is owned by the vault PDA (program mint authority).
   try {
@@ -118,6 +134,17 @@ const main = async () => {
     ASSOCIATED_TOKEN_PROGRAM_ID,
     true
   );
+  // Ensure the vault PDA has an ATA for MIND (staking vault).
+  await createAssociatedTokenAccountIdempotent(
+    provider.connection,
+    wallet.payer,
+    mindMint.publicKey,
+    vaultAuthority,
+    undefined,
+    TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID,
+    true
+  );
 
   await program.methods
     .initialize({
@@ -139,9 +166,11 @@ const main = async () => {
       mindMint: mindMint.publicKey,
       xntMint,
       vaultXntAta,
+      stakingVaultXntAta,
       tokenProgram: TOKEN_PROGRAM_ID,
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       systemProgram: SystemProgram.programId,
+      stakingVaultMindAta,
       rent: anchor.web3.SYSVAR_RENT_PUBKEY,
     })
     .rpc();
