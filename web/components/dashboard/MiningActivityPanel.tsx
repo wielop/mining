@@ -18,6 +18,7 @@ export function MiningActivityPanel() {
     onHeartbeat,
     onClaim,
     nextEpochCountdown,
+    estimatedRewardBase,
   } = useDashboard();
 
   const heartbeatDisabledReason = !publicKey
@@ -60,6 +61,16 @@ export function MiningActivityPanel() {
             activePositions.map((pos) => {
               const remaining =
                 nowTs != null ? Math.max(0, pos.data.lockEndTs - nowTs) : null;
+              const perMinerDaily =
+                estimatedRewardBase != null && activePositions.length > 0
+                  ? estimatedRewardBase / BigInt(activePositions.length)
+                  : null;
+              const remainingDays =
+                remaining != null ? BigInt(Math.max(1, Math.ceil(remaining / 86_400))) : null;
+              const totalRemaining =
+                perMinerDaily != null && remainingDays != null
+                  ? perMinerDaily * remainingDays
+                  : null;
               return (
                 <div
                   key={pos.pubkey}
@@ -74,6 +85,14 @@ export function MiningActivityPanel() {
                     <Badge variant="success">active</Badge>
                   </div>
                   <div className="mt-2 text-xs text-zinc-400">
+                    Paid{" "}
+                    <span className="font-mono text-zinc-200">
+                      {config
+                        ? `${formatTokenAmount(pos.data.lockedAmount, config.xntDecimals, 4)} XNT`
+                        : "—"}
+                    </span>
+                  </div>
+                  <div className="mt-2 text-xs text-zinc-400">
                     Ends at{" "}
                     <span className="font-mono text-zinc-200">
                       {formatUnixTs(pos.data.lockEndTs)}
@@ -83,6 +102,22 @@ export function MiningActivityPanel() {
                     Remaining{" "}
                     <span className="font-mono text-zinc-200">
                       {remaining != null ? formatDurationSeconds(remaining) : "—"}
+                    </span>
+                  </div>
+                  <div className="mt-2 text-xs text-zinc-400">
+                    Est. daily{" "}
+                    <span className="font-mono text-zinc-200">
+                      {config && perMinerDaily != null
+                        ? `${formatTokenAmount(perMinerDaily, config.mindDecimals, 4)} MIND`
+                        : "—"}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs text-zinc-400">
+                    Est. total{" "}
+                    <span className="font-mono text-zinc-200">
+                      {config && totalRemaining != null
+                        ? `${formatTokenAmount(totalRemaining, config.mindDecimals, 4)} MIND`
+                        : "—"}
                     </span>
                   </div>
                 </div>
