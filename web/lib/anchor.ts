@@ -2,14 +2,14 @@ import * as anchor from "@coral-xyz/anchor";
 import type { Connection } from "@solana/web3.js";
 import type { AnchorWallet } from "@solana/wallet-adapter-react";
 import idl from "@/idl/pocm_vault_mining.json";
-import { PROGRAM_ID } from "@/lib/solana";
+import { getProgramId } from "@/lib/solana";
 
 // The IDL JSON in this repo does not include account sizes/types in `accounts`,
 // which breaks Anchor's `program.account.*` helpers. We only use `.methods`.
 const idlForClient = {
   ...idl,
   // Ensure the Program ID matches the runtime config.
-  address: PROGRAM_ID.toBase58(),
+  address: getProgramId().toBase58(),
   accounts: [],
 };
 

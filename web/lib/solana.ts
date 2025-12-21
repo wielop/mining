@@ -2,24 +2,122 @@ import { PublicKey, type Connection } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";
 
 export const DEFAULT_RPC_URL = "https://rpc.testnet.x1.xyz";
-export const DEFAULT_PROGRAM_ID = "4BwetFdBHSkDTAByraaXiiwLFTQ5jj8w4mHGpYMrNn4r";
+export const DEFAULT_PROGRAM_ID = "2oJ68QPvNqvdegxPczqGYz7bmTyBSW9D6ZYs4w1HSpL9";
 
-export function rpcUrl() {
-  return process.env.NEXT_PUBLIC_RPC_URL ?? DEFAULT_RPC_URL;
+type EnvCache = { rpcUrl: string; programId: PublicKey };
+let cachedEnv: EnvCache | null = null;
+
+export function assertEnv(): EnvCache {
+  if (cachedEnv) return cachedEnv;
+  const rpcUrl = (process.env.NEXT_PUBLIC_RPC_URL ?? DEFAULT_RPC_URL).trim();
+  if (!rpcUrl) {
+    throw new Error("Missing NEXT_PUBLIC_RPC_URL. Set it in Vercel Environment Variables.");
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(rpcUrl);
+  } catch {
+    throw new Error(`Invalid NEXT_PUBLIC_RPC_URL: "${rpcUrl}"`);
+  }
+  if (parsed.protocol !== "https:") {
+    throw new Error(`NEXT_PUBLIC_RPC_URL must be https, got "${parsed.protocol}"`);
+  }
+  const programIdStr = (process.env.NEXT_PUBLIC_PROGRAM_ID ?? DEFAULT_PROGRAM_ID).trim();
+  if (!programIdStr) {
+    throw new Error("Missing NEXT_PUBLIC_PROGRAM_ID. Set it in Vercel Environment Variables.");
+  }
+  let programId: PublicKey;
+  try {
+    programId = new PublicKey(programIdStr);
+  } catch {
+    throw new Error(`Invalid NEXT_PUBLIC_PROGRAM_ID: "${programIdStr}"`);
+  }
+  cachedEnv = { rpcUrl, programId };
+  return cachedEnv;
 }
 
-export const PROGRAM_ID = new PublicKey(
-  process.env.NEXT_PUBLIC_PROGRAM_ID ?? DEFAULT_PROGRAM_ID
-);
+export function getRpcUrl() {
+  return assertEnv().rpcUrl;
+}
+
+export function getProgramId() {
+  return assertEnv().programId;
+}
+
+export function rpcUrl() {
+  return getRpcUrl();
+}
+
+const HEALTH_TIMEOUT_MS = 6_000;
+
+type HealthResult =
+  | { ok: true; url: string; method: "getHealth" | "getSlot" }
+  | { ok: false; url: string; error: string };
+
+async function postRpc(url: string, method: string, signal?: AbortSignal) {
+  const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: [] });
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body,
+    signal,
+  });
+  if (!res.ok) {
+    throw new Error(`RPC HTTP ${res.status}`);
+  }
+  const json = await res.json();
+  if (json?.error) {
+    throw new Error(`RPC error: ${json.error.message ?? "unknown"}`);
+  }
+  return json?.result;
+}
+
+async function postRpcWithTimeout(url: string, method: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
+  try {
+    await postRpc(url, method, controller.signal);
+    return { ok: true as const };
+  } catch (err: unknown) {
+    return { ok: false as const, error: err };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export async function checkRpcHealth(url = getRpcUrl()): Promise<HealthResult> {
+  const health = await postRpcWithTimeout(url, "getHealth");
+  if (health.ok) {
+    return { ok: true, url, method: "getHealth" };
+  }
+  const msg = health.error instanceof Error ? health.error.message : String(health.error);
+  const isTimeout = health.error instanceof Error && health.error.name === "AbortError";
+  const hinted = msg.includes("Failed to fetch")
+    ? `${msg} (possible CORS or network error)`
+    : isTimeout
+    ? `${msg} (timeout after ${HEALTH_TIMEOUT_MS}ms)`
+    : msg;
+
+  const fallback = await postRpcWithTimeout(url, "getSlot");
+  if (fallback.ok) {
+    return { ok: true, url, method: "getSlot" };
+  }
+  const fallbackMsg = fallback.error instanceof Error ? fallback.error.message : String(fallback.error);
+  return {
+    ok: false,
+    url,
+    error: `RPC healthcheck failed for ${url}: ${hinted}. Fallback getSlot failed: ${fallbackMsg}`,
+  };
+}
 
 export const deriveConfigPda = () =>
-  PublicKey.findProgramAddressSync([Buffer.from("config")], PROGRAM_ID)[0];
+  PublicKey.findProgramAddressSync([Buffer.from("config")], getProgramId())[0];
 
 export const deriveVaultPda = () =>
-  PublicKey.findProgramAddressSync([Buffer.from("vault")], PROGRAM_ID)[0];
+  PublicKey.findProgramAddressSync([Buffer.from("vault")], getProgramId())[0];
 
 export const derivePositionPda = (owner: PublicKey) =>
-  PublicKey.findProgramAddressSync([Buffer.from("position"), owner.toBuffer()], PROGRAM_ID)[0];
+  PublicKey.findProgramAddressSync([Buffer.from("position"), owner.toBuffer()], getProgramId())[0];
 
 export const derivePositionPdaV2 = (owner: PublicKey, positionIndex: bigint | number) =>
   PublicKey.findProgramAddressSync(
@@ -28,16 +126,16 @@ export const derivePositionPdaV2 = (owner: PublicKey, positionIndex: bigint | nu
       owner.toBuffer(),
       new BN(positionIndex).toArrayLike(Buffer, "le", 8),
     ],
-    PROGRAM_ID
+    getProgramId()
   )[0];
 
 export const deriveUserProfilePda = (owner: PublicKey) =>
-  PublicKey.findProgramAddressSync([Buffer.from("profile"), owner.toBuffer()], PROGRAM_ID)[0];
+  PublicKey.findProgramAddressSync([Buffer.from("profile"), owner.toBuffer()], getProgramId())[0];
 
 export const deriveEpochPda = (epochIndex: number) =>
   PublicKey.findProgramAddressSync(
     [Buffer.from("epoch"), new BN(epochIndex).toArrayLike(Buffer, "le", 8)],
-    PROGRAM_ID
+    getProgramId()
   )[0];
 
 export const deriveUserEpochPda = (owner: PublicKey, epochIndex: number) =>
@@ -47,7 +145,7 @@ export const deriveUserEpochPda = (owner: PublicKey, epochIndex: number) =>
       owner.toBuffer(),
       new BN(epochIndex).toArrayLike(Buffer, "le", 8),
     ],
-    PROGRAM_ID
+    getProgramId()
   )[0];
 
 export type DecodedConfig = {
@@ -240,5 +338,5 @@ export const deriveStakingPositionPda = (
       owner.toBuffer(),
       new BN(stakeIndex).toArrayLike(Buffer, "le", 8),
     ],
-    PROGRAM_ID
+    getProgramId()
   )[0];

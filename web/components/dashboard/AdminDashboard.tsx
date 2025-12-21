@@ -61,6 +61,7 @@ export function AdminDashboard() {
   const [busy, setBusy] = useState(false);
   const [treasuryBusy, setTreasuryBusy] = useState(false);
   const [stakingBusy, setStakingBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [lastSig, setLastSig] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,45 +73,53 @@ export function AdminDashboard() {
 
   const refresh = useCallback(async () => {
     setError(null);
-    const cfg = await fetchConfig(connection);
-    setConfig(cfg);
-    const ts = await fetchClockUnixTs(connection);
-    setNowTs(ts);
+    setLoading(true);
+    try {
+      const cfg = await fetchConfig(connection);
+      setConfig(cfg);
+      const ts = await fetchClockUnixTs(connection);
+      setNowTs(ts);
 
-    setTh1(cfg.th1.toString());
-    setTh2(cfg.th2.toString());
-    setMpCapBps(String(cfg.mpCapBpsPerWallet));
-    setEpochSeconds(cfg.epochSeconds.toString());
-    setXpPer7d(cfg.xpPer7d.toString());
-    setXpPer14d(cfg.xpPer14d.toString());
-    setXpPer30d(cfg.xpPer30d.toString());
-    setXpTierSilver(cfg.xpTierSilver.toString());
-    setXpTierGold(cfg.xpTierGold.toString());
-    setXpTierDiamond(cfg.xpTierDiamond.toString());
-    setXpBoostSilverBps(String(cfg.xpBoostSilverBps));
-    setXpBoostGoldBps(String(cfg.xpBoostGoldBps));
-    setXpBoostDiamondBps(String(cfg.xpBoostDiamondBps));
+      setTh1(cfg.th1.toString());
+      setTh2(cfg.th2.toString());
+      setMpCapBps(String(cfg.mpCapBpsPerWallet));
+      setEpochSeconds(cfg.epochSeconds.toString());
+      setXpPer7d(cfg.xpPer7d.toString());
+      setXpPer14d(cfg.xpPer14d.toString());
+      setXpPer30d(cfg.xpPer30d.toString());
+      setXpTierSilver(cfg.xpTierSilver.toString());
+      setXpTierGold(cfg.xpTierGold.toString());
+      setXpTierDiamond(cfg.xpTierDiamond.toString());
+      setXpBoostSilverBps(String(cfg.xpBoostSilverBps));
+      setXpBoostGoldBps(String(cfg.xpBoostGoldBps));
+      setXpBoostDiamondBps(String(cfg.xpBoostDiamondBps));
 
-    try {
-      const bal = await connection.getTokenAccountBalance(cfg.vaultXntAta, "confirmed");
-      const amountBase = bal.value.amount ? BigInt(bal.value.amount) : 0n;
-      setTreasuryBalanceUi(formatTokenAmount(amountBase, cfg.xntDecimals, 6));
-    } catch {
-      setTreasuryBalanceUi(null);
-    }
-    try {
-      const stakingBalance = await connection.getTokenAccountBalance(cfg.stakingVaultXntAta, "confirmed");
-      const amountBase = stakingBalance.value.amount ? BigInt(stakingBalance.value.amount) : 0n;
-      setStakingVaultXntBalanceUi(formatTokenAmount(amountBase, cfg.xntDecimals, 6));
-    } catch {
-      setStakingVaultXntBalanceUi(null);
-    }
-    try {
-      const stakingMind = await connection.getTokenAccountBalance(cfg.stakingVaultMindAta, "confirmed");
-      const amountBase = stakingMind.value.amount ? BigInt(stakingMind.value.amount) : 0n;
-      setStakingVaultMindBalanceUi(formatTokenAmount(amountBase, cfg.mindDecimals, 6));
-    } catch {
-      setStakingVaultMindBalanceUi(null);
+      try {
+        const bal = await connection.getTokenAccountBalance(cfg.vaultXntAta, "confirmed");
+        const amountBase = bal.value.amount ? BigInt(bal.value.amount) : 0n;
+        setTreasuryBalanceUi(formatTokenAmount(amountBase, cfg.xntDecimals, 6));
+      } catch {
+        setTreasuryBalanceUi(null);
+      }
+      try {
+        const stakingBalance = await connection.getTokenAccountBalance(cfg.stakingVaultXntAta, "confirmed");
+        const amountBase = stakingBalance.value.amount ? BigInt(stakingBalance.value.amount) : 0n;
+        setStakingVaultXntBalanceUi(formatTokenAmount(amountBase, cfg.xntDecimals, 6));
+      } catch {
+        setStakingVaultXntBalanceUi(null);
+      }
+      try {
+        const stakingMind = await connection.getTokenAccountBalance(cfg.stakingVaultMindAta, "confirmed");
+        const amountBase = stakingMind.value.amount ? BigInt(stakingMind.value.amount) : 0n;
+        setStakingVaultMindBalanceUi(formatTokenAmount(amountBase, cfg.mindDecimals, 6));
+      } catch {
+        setStakingVaultMindBalanceUi(null);
+      }
+    } catch (e: unknown) {
+      console.error(e);
+      setError(formatError(e));
+    } finally {
+      setLoading(false);
     }
   }, [connection]);
 
@@ -662,7 +671,18 @@ export function AdminDashboard() {
 
         {error ? (
           <Card className="border-rose-500/20">
-            <CardHeader title="Error" description="Actionable details from RPC/simulation." right={<Badge variant="danger">failed</Badge>} />
+            <CardHeader
+              title="Error"
+              description="Actionable details from RPC/simulation."
+              right={
+                <div className="flex items-center gap-2">
+                  <Button variant="secondary" onClick={() => void refresh()} disabled={loading}>
+                    {loading ? "Retrying…" : "Retry"}
+                  </Button>
+                  <Badge variant="danger">failed</Badge>
+                </div>
+              }
+            />
             <pre className="mt-3 whitespace-pre-wrap rounded-xl border border-white/10 bg-zinc-950/40 p-3 text-xs text-rose-100">
               {error}
             </pre>

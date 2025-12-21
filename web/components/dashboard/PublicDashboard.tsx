@@ -24,7 +24,6 @@ import { CopyButton } from "@/components/shared/CopyButton";
 import { useToast } from "@/components/shared/ToastProvider";
 import { getProgram } from "@/lib/anchor";
 import {
-  PROGRAM_ID,
   deriveConfigPda,
   deriveEpochPda,
   deriveStakingPositionPda,
@@ -36,6 +35,7 @@ import {
   fetchConfig,
   fetchTokenBalanceUi,
   getCurrentEpochFrom,
+  getProgramId,
 } from "@/lib/solana";
 import {
   decodeEpochStateAccount,
@@ -131,6 +131,7 @@ export function PublicDashboard() {
   const [stakeDurationDays, setStakeDurationDays] = useState<7 | 14 | 30 | 60>(30);
   const [stakeAmountUi, setStakeAmountUi] = useState("");
   const [busy, setBusy] = useState<BusyAction | null>(null);
+  const [loading, setLoading] = useState(false);
   const [lastSig, setLastSig] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -171,106 +172,115 @@ export function PublicDashboard() {
 
   const refresh = useCallback(async () => {
     setError(null);
-    const cfg = await fetchConfig(connection);
-    setConfig(cfg);
-    const ts = await fetchClockUnixTs(connection);
-    setNowTs(ts);
-
+    setLoading(true);
     try {
-      const vaultBalance = await connection.getTokenAccountBalance(cfg.stakingVaultXntAta, "confirmed");
-      setStakingVaultXntBalanceUi(
-        formatTokenAmount(BigInt(vaultBalance.value.amount || "0"), cfg.xntDecimals, 6)
-      );
-    } catch {
-      setStakingVaultXntBalanceUi(null);
+      const cfg = await fetchConfig(connection);
+      setConfig(cfg);
+      const ts = await fetchClockUnixTs(connection);
+      setNowTs(ts);
+
+      try {
+        const vaultBalance = await connection.getTokenAccountBalance(cfg.stakingVaultXntAta, "confirmed");
+        setStakingVaultXntBalanceUi(
+          formatTokenAmount(BigInt(vaultBalance.value.amount || "0"), cfg.xntDecimals, 6)
+        );
+      } catch {
+        setStakingVaultXntBalanceUi(null);
+      }
+
+      try {
+        const vaultMind = await connection.getTokenAccountBalance(cfg.stakingVaultMindAta, "confirmed");
+        setStakingVaultMindBalanceUi(
+          formatTokenAmount(BigInt(vaultMind.value.amount || "0"), cfg.mindDecimals, 6)
+        );
+      } catch {
+        setStakingVaultMindBalanceUi(null);
+      }
+
+      if (!publicKey) {
+        setPositions([]);
+        setStakingPositions([]);
+        setXntBalanceUi(null);
+        setMindBalanceUi(null);
+        setMindBalanceBase(0n);
+        setEpochState(null);
+        setUserEpoch(null);
+        setUserProfile(null);
+        return;
+      }
+
+      const programId = getProgramId();
+      const [positionsGpa, stakingGpa, profileAcc] = await Promise.all([
+        connection.getProgramAccounts(programId, {
+          commitment: "confirmed",
+          filters: [
+            { dataSize: 93 },
+            { memcmp: { offset: 8, bytes: publicKey.toBase58() } },
+          ],
+        }),
+        connection.getProgramAccounts(programId, {
+          commitment: "confirmed",
+          filters: [
+            { dataSize: 85 },
+            { memcmp: { offset: 8, bytes: publicKey.toBase58() } },
+          ],
+        }),
+        connection.getAccountInfo(deriveUserProfilePda(publicKey), "confirmed"),
+      ]);
+
+      const decoded = positionsGpa
+        .map((a) => ({
+          pubkey: a.pubkey.toBase58(),
+          data: decodeUserPositionAccount(Buffer.from(a.account.data)),
+        }))
+        .sort((a, b) => b.data.lockStartTs - a.data.lockStartTs);
+      setPositions(decoded);
+
+      const decodedStakes = stakingGpa
+        .map((a) => ({
+          pubkey: a.pubkey.toBase58(),
+          data: decodeStakingPositionAccount(Buffer.from(a.account.data)),
+        }))
+        .sort((a, b) => b.data.startTs - a.data.startTs);
+      setStakingPositions(decodedStakes);
+
+      setUserProfile(profileAcc?.data ? decodeUserProfileAccount(Buffer.from(profileAcc.data)) : null);
+
+      const xntMint = cfg.xntMint;
+      if (xntMint.equals(NATIVE_MINT)) {
+        const lamports = await connection.getBalance(publicKey, "confirmed");
+        setXntBalanceUi(formatTokenAmount(BigInt(lamports), 9, 6));
+      } else {
+        const ownerXntAta = getAssociatedTokenAddressSync(xntMint, publicKey);
+        setXntBalanceUi(await fetchTokenBalanceUi(connection, ownerXntAta));
+      }
+
+      const userMindAta = getAssociatedTokenAddressSync(cfg.mindMint, publicKey);
+      try {
+        const mindBalance = await connection.getTokenAccountBalance(userMindAta, "confirmed");
+        const amountBase = BigInt(mindBalance.value.amount || "0");
+        setMindBalanceBase(amountBase);
+        setMindBalanceUi(mindBalance.value.uiAmountString ?? "0");
+      } catch {
+        setMindBalanceBase(0n);
+        setMindBalanceUi("0");
+      }
+
+      const epoch = getCurrentEpochFrom(cfg, ts);
+      const epochStatePda = deriveEpochPda(epoch);
+      const userEpochPda = deriveUserEpochPda(publicKey, epoch);
+      const [epochAcc, userAcc] = await Promise.all([
+        connection.getAccountInfo(epochStatePda, "confirmed"),
+        connection.getAccountInfo(userEpochPda, "confirmed"),
+      ]);
+      setEpochState(epochAcc?.data ? decodeEpochStateAccount(Buffer.from(epochAcc.data)) : null);
+      setUserEpoch(userAcc?.data ? decodeUserEpochAccount(Buffer.from(userAcc.data)) : null);
+    } catch (e: unknown) {
+      console.error(e);
+      setError(formatError(e));
+    } finally {
+      setLoading(false);
     }
-
-    try {
-      const vaultMind = await connection.getTokenAccountBalance(cfg.stakingVaultMindAta, "confirmed");
-      setStakingVaultMindBalanceUi(
-        formatTokenAmount(BigInt(vaultMind.value.amount || "0"), cfg.mindDecimals, 6)
-      );
-    } catch {
-      setStakingVaultMindBalanceUi(null);
-    }
-
-    if (!publicKey) {
-      setPositions([]);
-      setStakingPositions([]);
-      setXntBalanceUi(null);
-      setMindBalanceUi(null);
-      setMindBalanceBase(0n);
-      setEpochState(null);
-      setUserEpoch(null);
-      setUserProfile(null);
-      return;
-    }
-
-    const [positionsGpa, stakingGpa, profileAcc] = await Promise.all([
-      connection.getProgramAccounts(PROGRAM_ID, {
-        commitment: "confirmed",
-        filters: [
-          { dataSize: 93 },
-          { memcmp: { offset: 8, bytes: publicKey.toBase58() } },
-        ],
-      }),
-      connection.getProgramAccounts(PROGRAM_ID, {
-        commitment: "confirmed",
-        filters: [
-          { dataSize: 85 },
-          { memcmp: { offset: 8, bytes: publicKey.toBase58() } },
-        ],
-      }),
-      connection.getAccountInfo(deriveUserProfilePda(publicKey), "confirmed"),
-    ]);
-
-    const decoded = positionsGpa
-      .map((a) => ({
-        pubkey: a.pubkey.toBase58(),
-        data: decodeUserPositionAccount(Buffer.from(a.account.data)),
-      }))
-      .sort((a, b) => b.data.lockStartTs - a.data.lockStartTs);
-    setPositions(decoded);
-
-    const decodedStakes = stakingGpa
-      .map((a) => ({
-        pubkey: a.pubkey.toBase58(),
-        data: decodeStakingPositionAccount(Buffer.from(a.account.data)),
-      }))
-      .sort((a, b) => b.data.startTs - a.data.startTs);
-    setStakingPositions(decodedStakes);
-
-    setUserProfile(profileAcc?.data ? decodeUserProfileAccount(Buffer.from(profileAcc.data)) : null);
-
-    const xntMint = cfg.xntMint;
-    if (xntMint.equals(NATIVE_MINT)) {
-      const lamports = await connection.getBalance(publicKey, "confirmed");
-      setXntBalanceUi(formatTokenAmount(BigInt(lamports), 9, 6));
-    } else {
-      const ownerXntAta = getAssociatedTokenAddressSync(xntMint, publicKey);
-      setXntBalanceUi(await fetchTokenBalanceUi(connection, ownerXntAta));
-    }
-
-    const userMindAta = getAssociatedTokenAddressSync(cfg.mindMint, publicKey);
-    try {
-      const mindBalance = await connection.getTokenAccountBalance(userMindAta, "confirmed");
-      const amountBase = BigInt(mindBalance.value.amount || "0");
-      setMindBalanceBase(amountBase);
-      setMindBalanceUi(mindBalance.value.uiAmountString ?? "0");
-    } catch {
-      setMindBalanceBase(0n);
-      setMindBalanceUi("0");
-    }
-
-    const epoch = getCurrentEpochFrom(cfg, ts);
-    const epochStatePda = deriveEpochPda(epoch);
-    const userEpochPda = deriveUserEpochPda(publicKey, epoch);
-    const [epochAcc, userAcc] = await Promise.all([
-      connection.getAccountInfo(epochStatePda, "confirmed"),
-      connection.getAccountInfo(userEpochPda, "confirmed"),
-    ]);
-    setEpochState(epochAcc?.data ? decodeEpochStateAccount(Buffer.from(epochAcc.data)) : null);
-    setUserEpoch(userAcc?.data ? decodeUserEpochAccount(Buffer.from(userAcc.data)) : null);
   }, [connection, publicKey]);
 
   useEffect(() => {
@@ -781,8 +791,8 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
                 title="Status overview"
                 description="Live epoch, emission & miner metadata."
                 right={
-                  <Button variant="secondary" onClick={() => void refresh()} disabled={busy !== null}>
-                    Refresh
+                  <Button variant="secondary" onClick={() => void refresh()} disabled={busy !== null || loading}>
+                    {loading ? "Refreshing…" : "Refresh"}
                   </Button>
                 }
               />
@@ -1356,7 +1366,7 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
                 >
                   View in explorer
                 </a>
-                <Badge variant="muted">Program: {shortPk(PROGRAM_ID.toBase58(), 6)}</Badge>
+                <Badge variant="muted">Program: {shortPk(getProgramId().toBase58(), 6)}</Badge>
               </div>
             </div>
           </Card>
@@ -1364,7 +1374,18 @@ const onWithdrawStake = async (stake: { pubkey: string; data: ReturnType<typeof 
 
         {error && (
           <Card className="border-rose-500/20">
-            <CardHeader title="Error" description="Simulation/RPC details." right={<Badge variant="danger">failed</Badge>} />
+            <CardHeader
+              title="Error"
+              description="Simulation/RPC details."
+              right={
+                <div className="flex items-center gap-2">
+                  <Button variant="secondary" onClick={() => void refresh()} disabled={loading}>
+                    {loading ? "Retrying…" : "Retry"}
+                  </Button>
+                  <Badge variant="danger">failed</Badge>
+                </div>
+              }
+            />
             <pre className="mt-3 whitespace-pre-wrap rounded-xl border border-white/10 bg-zinc-950/40 p-3 text-xs text-rose-100">
               {error}
             </pre>
