@@ -9,6 +9,7 @@ export function Button({
   variant = "primary",
   size = "md",
   title,
+  className,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
@@ -16,6 +17,7 @@ export function Button({
   title?: string;
   variant?: "primary" | "secondary" | "ghost" | "danger";
   size?: "sm" | "md" | "lg";
+  className?: string;
 }) {
   const base =
     "inline-flex items-center justify-center gap-2 rounded-xl font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70 disabled:opacity-40 disabled:cursor-not-allowed";
@@ -37,7 +39,7 @@ export function Button({
   return (
     <button
       type="button"
-      className={cn(base, sizes, variants)}
+      className={cn(base, sizes, variants, className)}
       onClick={onClick}
       disabled={disabled}
       title={title}

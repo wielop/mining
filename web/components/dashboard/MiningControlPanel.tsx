@@ -133,11 +133,25 @@ export function MiningControlPanel() {
           <div className="mt-6">
             <Button
               size="lg"
+              className="h-14 text-base"
               onClick={() => void onDeposit().catch(() => null)}
               disabled={!!buyDisabledReason}
             >
               {busy === "buy" ? "Submitting…" : "BUY MINER"}
             </Button>
+            <div className="mt-2 flex items-center justify-center gap-2 text-[11px] uppercase tracking-[0.2em] text-zinc-400">
+              <svg
+                className="h-4 w-4 text-cyan-200"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+              >
+                <path d="M3 3l6 6" />
+                <path d="M8 8l3-3 10 10-3 3L8 8z" />
+              </svg>
+              Mine XNT
+            </div>
           </div>
           {buyDisabledReason ? (
             <div className="text-xs text-amber-200">{buyDisabledReason}</div>

@@ -43,8 +43,11 @@ export function MiningActivityPanel() {
             ? "Transaction pending."
             : null;
 
-  const visibleMiners = activePositions.slice(0, 2);
-  const extraMiners = activePositions.slice(2);
+  const sortedMiners = [...activePositions].sort((a, b) =>
+    a.data.lockedAmount > b.data.lockedAmount ? -1 : a.data.lockedAmount < b.data.lockedAmount ? 1 : 0
+  );
+  const visibleMiners = sortedMiners.slice(0, 2);
+  const extraMiners = sortedMiners.slice(2);
 
   return (
     <Card className="border-cyan-400/20 bg-ink/90">

@@ -16,7 +16,21 @@ export function MiningXpHero() {
           <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Your XP</div>
           <div className="mt-2 text-2xl font-semibold text-white">Level up your rewards</div>
         </div>
-        <TierBadge tier={tierName as "Bronze" | "Silver" | "Gold" | "Diamond"} />
+        <div className="flex items-center gap-2">
+          <svg
+            className="h-5 w-5 text-cyan-200"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          >
+            <path d="M12 3l3 6 6 .8-4.5 4.2 1.3 6-5.8-3.2L6.2 20l1.3-6L3 9.8 9 9l3-6z" />
+          </svg>
+          <TierBadge
+            tier={tierName as "Bronze" | "Silver" | "Gold" | "Diamond"}
+            className="px-4 py-1.5 text-[11px]"
+          />
+        </div>
       </div>
 
       <div className="mt-5">
