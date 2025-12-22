@@ -11,7 +11,7 @@ import {
   mintTo,
   transfer,
 } from "@solana/spl-token";
-import { Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram } from "@solana/web3.js";
+import { Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import { expect } from "chai";
 import { MiningV2 } from "../target/types/mining_v2";
 import miningV2Idl from "../target/idl/mining_v2.json";
@@ -780,9 +780,8 @@ describe("mining_v2", () => {
 
     await sleep(2000);
 
-    const claimFor = async (user: Keypair) => {
-      const before = await getTokenAmount(userXntAta(user.publicKey));
-      await program.methods
+    const claimIxFor = async (user: Keypair) =>
+      program.methods
         .claimXnt()
         .accounts({
           owner: user.publicKey,
@@ -795,15 +794,28 @@ describe("mining_v2", () => {
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
-        .signers([user])
-        .rpc();
-      const after = await getTokenAmount(userXntAta(user.publicKey));
-      return after.sub(before);
-    };
+        .instruction();
 
-    const payout0 = await claimFor(users[0]);
-    const payout1 = await claimFor(users[1]);
-    const payout2 = stakeThird.gt(new BN(0)) ? await claimFor(users[2]) : new BN(0);
+    const before0 = await getTokenAmount(userXntAta(users[0].publicKey));
+    const before1 = await getTokenAmount(userXntAta(users[1].publicKey));
+    const before2 = await getTokenAmount(userXntAta(users[2].publicKey));
+
+    const tx = new Transaction();
+    tx.add(await claimIxFor(users[0]));
+    tx.add(await claimIxFor(users[1]));
+    if (stakeThird.gt(new BN(0))) {
+      tx.add(await claimIxFor(users[2]));
+    }
+    const signers = stakeThird.gt(new BN(0)) ? users : users.slice(0, 2);
+    await provider.sendAndConfirm(tx, signers);
+
+    const after0 = await getTokenAmount(userXntAta(users[0].publicKey));
+    const after1 = await getTokenAmount(userXntAta(users[1].publicKey));
+    const after2 = await getTokenAmount(userXntAta(users[2].publicKey));
+
+    const payout0 = after0.sub(before0);
+    const payout1 = after1.sub(before1);
+    const payout2 = stakeThird.gt(new BN(0)) ? after2.sub(before2) : new BN(0);
 
     const cap = payout0.muln(12).divn(10).add(new BN(1_000_000));
     expect(payout1.lte(cap)).to.be.true;
