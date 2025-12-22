@@ -1,9 +1,12 @@
 /** @type {import('next').NextConfig} */
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import webpack from "webpack";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+const webpack = await import("webpack");
 
 const nextConfig = {
   output: "standalone",
@@ -23,10 +26,14 @@ const nextConfig = {
     config.resolve.alias = {
       ...(config.resolve.alias ?? {}),
       bs58: path.join(__dirname, "lib", "bs58-shim.ts"),
-      // Some transitive deps (e.g. loggers) may `require("pino-pretty")` even
-      // though it's optional; bundling then fails with "Module not found".
       "pino-pretty": path.join(__dirname, "lib", "pino-pretty-shim.ts"),
     };
+    config.plugins = config.plugins ?? [];
+    config.plugins.push(
+      new webpack.ProvidePlugin({
+        Buffer: ["buffer", "Buffer"],
+      })
+    );
     return config;
   },
 };
