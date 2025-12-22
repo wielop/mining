@@ -1,97 +1,58 @@
-# Proof-of-Commitment Mining (PoCM) Vault
+# Mining V2 (X1)
 
-Anchor program for X1 testnet that locks XNT for fixed terms (7/14/30 days) and emits a new MIND token per daily epoch. Activity is opt-in per epoch via heartbeat and rewards are capped to prevent whales.
+Nowy program mining+staking V2 dla X1. V1 zostal usuniety z repo (legacy nie jest juz utrzymywany).
 
-Key rules:
-- **Mining power (MP)** = weighted locked XNT (tiered diminishing returns) × time multiplier (7d=1.0, 14d=1.25, 30d=1.5) × activity (heartbeat on the epoch).
-- **Daily emission** starts at 100,000 MIND/day and decays by 10% every 90 days; cannot exceed `mined_cap`.
-- **Wallet cap**: effective MP in reward calc is limited to `mp_cap_bps_per_wallet` (default 2% of total epoch MP), leaving excess emission unallocated rather than mintable by admin.
-- **One position per wallet**, no top-ups while locked, no early withdrawals.
+## Zalozenia (V2)
+- Kontrakty miningowe daja Hashpower (HP) na staly czas.
+- Globalna emisja MIND jest stala na dzien i dzielona pro-rata do aktywnego HP.
+- Jesli `networkHpActive == 0` -> emisja jest wstrzymana (brak unallocated).
+- Anti-whale: skuteczny HP per wallet jest ograniczony (`maxEffectiveHp`).
+- Staking MIND wyplaca XNT z `stakingRewardVault` (30% z zakupow kontraktow).
+- Badge bonus dziala jako mnoznik wyplaty usera (cap 20%), nie zmienia globalnego `rewardRate`.
 
-## Accounts (PDAs)
-- `Config` (`["config"]`): admin, mints, vault ATA, emission params, mined totals/cap, thresholds, mp cap, epoch_seconds (optionally editable), bumps.
-- `Vault authority` (`["vault"]`): PDA signing for minting and vault transfers.
-- `UserPosition` (`["position", user]`): lock metadata and time multiplier.
-- `EpochState` (`["epoch", epoch_index_le"]`): start/end, daily emission, total_effective_mp, finalized flag.
-- `UserEpoch` (`["user_epoch", user, epoch_index_le"]`): user_mp snapshot, claimed flag.
+## Produkty miningowe (start)
+- Starter Rig: 7d, koszt 1 XNT, hp=1
+- Pro Rig: 14d, koszt 10 XNT, hp=5
+- Industrial Rig: 28d, koszt 20 XNT, hp=7
 
-## Instructions
-- `initialize(params)`: initialize config. The MIND mint (with PDA mint authority) and the vault XNT ATA are created off-chain by `scripts/init.ts`. `epoch_seconds` is normally 86,400; if `allow_epoch_seconds_edit=true`, shorter epochs also shorten lockups for testing.
-- `create_position(duration_days)`: one per wallet, stores duration and multiplier.
-- `deposit(amount)`: transfer XNT into the vault; only when not already locked.
-- `heartbeat(epoch_index)`: activate position for the current epoch, create `EpochState` if needed, register MP (tiered thresholds, then time multiplier).
-- `claim(epoch_index)`: mint MIND to user ATA; MP is capped to `mp_cap_bps_per_wallet`.
-- `withdraw()`: withdraw locked XNT after `lock_end_ts` (no early exit).
-- `admin_update_config`: update thresholds/mp cap and, if enabled, `epoch_seconds` (test-only flag).
+## Instrukcje (skrot)
+- `init_config` - tworzy config + podlacza vaulty
+- `buy_contract` - kupno kontraktu (split 30/70 do vaultow)
+- `claim_mind` - claim MIND (mozna czesto)
+- `deactivate_position` - wygaszenie kontraktu po endTs
+- `stake_mind` / `unstake_mind` / `claim_xnt` / `roll_epoch`
 
-## Local development
-Prereqs: Rust + Anchor 0.30.x, Node 18+, yarn/ts-node.
-
-This repo includes wrappers to keep the Anchor toolchain hitting the Solana SBF target without relinking. The platform-toolchain Rust/Cargo already bundles the `sbf-solana-solana` backend, so make sure the aliases land there before running Anchor:
-
+## Local dev
 ```
-yarn install          # install JS deps (requires npm registry access)
-export SOLANA_BIN_DIR="$HOME/solana-v1.18.17/bin"
-export SBF_TARGET_DIR="$(pwd)/scripts/sbf-target"
-export PATH="$SBF_TARGET_DIR/bin:$(pwd)/scripts/rustup-wrapper:$(pwd)/scripts/cargo-wrapper:$SOLANA_BIN_DIR:$PATH"
-export RUST_TARGET_PATH="$SBF_TARGET_DIR"
-export RUSTUP_TOOLCHAIN=solana
-export CARGO_NET_OFFLINE=true
-anchor build          # builds the program + IDL
-anchor test --provider.cluster localnet
+yarn install
+anchor build
+yarn test
 ```
 
-`$SBF_TARGET_DIR` ships `sbf-solana-solana.json` (target spec that matches Solana's bundled rustc) and a small `rust-lld` wrapper that points at the Solana platform-tools `ld.lld` so the new toolchain can link the SBF binaries.
-
-If `rustc +solana --print target-list` still fails to list `sbf-solana-solana`, point the alias at the SDK/`platform-tools` Rust once:
-
+## Testnet deploy + smoke
 ```
-export SOLANA_BIN_DIR="$HOME/solana-v1.18.17/bin"
-rustup toolchain link solana "$SOLANA_BIN_DIR/sdk/sbf/dependencies/platform-tools/rust"
+yarn testnet:deploy
+# opcjonalnie
+V2_SMOKE_BUY=1 V2_SMOKE_CLAIM=1 V2_SMOKE_STAKE=1 yarn testnet:smoke
 ```
 
-After this linking step, `cargo +solana`/`anchor build` will use the same Rust 1.75 toolchain that already ships the SBF target.
+## ENV (skrypty)
+Wymagane/obslugiwane zmienne:
+- `RPC_URL` (domyslnie: https://rpc.testnet.x1.xyz)
+- `WALLET` (domyslnie: ~/.config/solana/id.json)
+- `NEXT_PUBLIC_PROGRAM_ID` (Program ID V2)
+- `XNT_MINT` (domyslnie: So11111111111111111111111111111111111111112)
+- `MIND_MINT` (opcjonalnie - jesli chcesz uzyc istniejacego mintu)
+- `MIND_DECIMALS` (domyslnie: 9)
+- `EMISSION_MIND_PER_DAY` (domyslnie: 10000)
+- `EMISSION_PER_SEC` (opcjonalnie - nadpisuje wyliczenie per day)
+- `MAX_EFFECTIVE_HP` (domyslnie: 50)
+- `SECONDS_PER_DAY` (domyslnie: 86400)
+- `SEED_STAKING_XNT_BASE` (opcjonalnie - seed vaulta staking)
+- `SEED_TREASURY_XNT_BASE` (opcjonalnie - seed treasury)
 
-Tests cover init → deposit → heartbeat/claim, inactivity (no UserEpoch), whale cap, and withdraw after the shortened lock.
-
-## Deploying to X1 testnet
-```
-./scripts/testnet-deploy.sh
-```
-Program ID: `2oJ68QPvNqvdegxPczqGYz7bmTyBSW9D6ZYs4w1HSpL9`.
-
-Configure the protocol (creates MIND mint + vault ATA off-chain, then runs `initialize`):
-```
-cp .env.example .env   # fill XNT_MINT, thresholds, supply, etc.
-yarn init              # runs scripts/init.ts
-```
-
-## CLI scripts (ts-node)
-All scripts read `.env` (RPC_URL, WALLET, PROGRAM_ID, etc.).
-- `yarn init` – run `initialize`.
-- `yarn deposit` – creates position if missing (DURATION_DAYS env) then deposits `AMOUNT` (base units).
-- `yarn heartbeat` – heartbeats current epoch (or `EPOCH_INDEX` override).
-- `yarn claim` – claims for the given/current epoch.
-- `yarn withdraw` – withdraws after lock expiry.
-
-## Web app (Vercel)
-
-The `web/` folder contains a public UI (`/`) and an admin UI (`/admin`) for interacting with the deployed program.
-
-Vercel setup:
-- Import the GitHub repo.
-- Set **Root Directory** to `web`.
-- Env vars:
-  - `NEXT_PUBLIC_RPC_URL` (default: `https://rpc.testnet.x1.xyz`)
-  - `NEXT_PUBLIC_PROGRAM_ID` (default: `2oJ68QPvNqvdegxPczqGYz7bmTyBSW9D6ZYs4w1HSpL9`)
-
-### Env hints
-- `XNT_MINT` – existing XNT mint (not hardcoded).
-- `TOTAL_SUPPLY_MIND` – base units for full MIND supply; `MINED_CAP_BPS` sets the emission cap percentage.
-- `THRESHOLD_1/2` – base units of XNT for diminishing returns tiers.
-- `ALLOW_EPOCH_EDIT=false` for production; set true with small `EPOCH_SECONDS` only for local testing (also shortens lockups).
-
-## Notes on caps & emission
-- Whale cap: reward uses `min(user_mp, total_mp * mp_cap_bps_per_wallet / 10_000)`; unused emission is not mintable elsewhere.
-- Soft halving: emission ×0.9 every 90 real days (uses 86,400s days even if `epoch_seconds` is reduced for tests).
-- Reward math uses u128/u64 with checked arithmetic; no floating point.
+## Web (Vercel)
+Root Directory: `web`
+Env vars:
+- `NEXT_PUBLIC_RPC_URL=https://rpc.testnet.x1.xyz`
+- `NEXT_PUBLIC_PROGRAM_ID=uaDkkJGLLEY3kFMhhvrh5MZJ6fmwCmhNf8L7BZQJ9Aw`

@@ -28,15 +28,15 @@ export function WalletProviders({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const logKey = "__pocm_diag_logged__";
+    const logKey = "__mining_v2_diag_logged__";
     const globalAny = globalThis as { [key: string]: unknown };
     if (!(logKey in globalAny)) {
       globalAny[logKey] = true;
       try {
-        console.log("[pocm] rpc", getRpcUrl());
-        console.log("[pocm] program", getProgramId().toBase58());
+        console.log("[mining_v2] rpc", getRpcUrl());
+        console.log("[mining_v2] program", getProgramId().toBase58());
       } catch (e) {
-        console.error("[pocm] env error", e);
+        console.error("[mining_v2] env error", e);
       }
     }
   }, []);
@@ -47,15 +47,15 @@ export function WalletProviders({ children }: { children: React.ReactNode }) {
       if (!endpoint) return;
       const result = await checkRpcHealth(endpoint);
       if (result.ok) {
-        console.log("[pocm] rpc health ok", result.method, result.url);
+        console.log("[mining_v2] rpc health ok", result.method, result.url);
         return;
       }
-      console.error("[pocm] rpc health failed", result.error);
+      console.error("[mining_v2] rpc health failed", result.error);
       if (!usingProxyRef.current && result.error.includes("Failed to fetch")) {
         if (mounted) {
           usingProxyRef.current = true;
           const proxyUrl = new URL("/api/rpc", window.location.origin).toString();
-          console.warn("[pocm] switching to /api/rpc proxy", proxyUrl);
+          console.warn("[mining_v2] switching to /api/rpc proxy", proxyUrl);
           setEndpoint(proxyUrl);
         }
       }
@@ -101,11 +101,11 @@ function WalletLogger() {
   const { publicKey } = useWallet();
   useEffect(() => {
     if (!publicKey) return;
-    const logKey = "__pocm_wallet_logged__";
+    const logKey = "__mining_v2_wallet_logged__";
     const globalAny = globalThis as { [key: string]: unknown };
     if (logKey in globalAny) return;
     globalAny[logKey] = true;
-    console.log("[pocm] wallet", publicKey.toBase58());
+    console.log("[mining_v2] wallet", publicKey.toBase58());
   }, [publicKey]);
   return null;
 }

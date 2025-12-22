@@ -1,15 +1,10 @@
 {
-  "name": "pocm-vault-mining",
+  "name": "mining-v2",
   "version": "0.1.0",
   "license": "MIT",
   "scripts": {
     "test": "yarn run ts-mocha -p ./tsconfig.json -t 200000 tests/**/*.ts",
     "build:program": "anchor build",
-    "init": "ts-node scripts/init.ts",
-    "deposit": "ts-node scripts/deposit.ts",
-    "heartbeat": "ts-node scripts/heartbeat.ts",
-    "claim": "ts-node scripts/claim.ts",
-    "withdraw": "ts-node scripts/withdraw.ts",
     "testnet:deploy": "bash scripts/testnet-v2-deploy.sh",
     "testnet:smoke": "ts-node scripts/testnet-v2-smoke.ts"
   },
