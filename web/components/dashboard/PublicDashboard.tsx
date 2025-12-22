@@ -29,6 +29,7 @@ import {
   fetchConfig,
   getProgramId,
 } from "@/lib/solana";
+import type { DecodedUserStake } from "@/lib/decoders";
 import {
   decodeMinerPositionAccount,
   decodeUserMiningProfileAccount,
@@ -70,7 +71,7 @@ export function PublicDashboard() {
   const [userProfile, setUserProfile] = useState<
     ReturnType<typeof decodeUserMiningProfileAccount> | null
   >(null);
-  const [userStake, setUserStake] = useState<ReturnType<typeof decodeUserStakeAccount> | null>(null);
+  const [userStake, setUserStake] = useState<DecodedUserStake | null>(null);
   const [mintDecimals, setMintDecimals] = useState<{ xnt: number; mind: number } | null>(null);
   const [xntBalance, setXntBalance] = useState<bigint>(0n);
   const [mindBalance, setMindBalance] = useState<bigint>(0n);
@@ -458,9 +459,9 @@ export function PublicDashboard() {
     });
   };
 
-  const buyDisabled = !publicKey || !config || busy;
-  const stakeDisabled = !publicKey || !config || !mintDecimals || busy || !stakeAmountUi;
-  const unstakeDisabled = !publicKey || !config || !mintDecimals || busy || !unstakeAmountUi;
+  const buyDisabled = !publicKey || !config || Boolean(busy);
+  const stakeDisabled = !publicKey || !config || !mintDecimals || Boolean(busy) || stakeAmountUi.trim() === "";
+  const unstakeDisabled = !publicKey || !config || !mintDecimals || Boolean(busy) || unstakeAmountUi.trim() === "";
 
   return (
     <div className="min-h-screen bg-ink text-white">
@@ -599,12 +600,7 @@ export function PublicDashboard() {
                         >
                           Claim
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void onDeactivate(p.pubkey, p.data.owner)}
-                          disabled={busy != null || !expired}
-                        >
+                        <Button size="sm" onClick={() => void onDeactivate(p.pubkey, p.data.owner)} disabled={busy != null || !expired}>
                           Deactivate
                         </Button>
                       </div>
@@ -643,12 +639,7 @@ export function PublicDashboard() {
                 onChange={setUnstakeAmountUi}
                 placeholder="Unstake amount (MIND)"
               />
-              <Button
-                className="mt-3"
-                variant="outline"
-                onClick={() => void onUnstake()}
-                disabled={unstakeDisabled}
-              >
+              <Button className="mt-3" onClick={() => void onUnstake()} disabled={unstakeDisabled}>
                 {busy === "Unstake MIND" ? "Submitting..." : "Unstake"}
               </Button>
             </div>

@@ -9,7 +9,9 @@
     "deposit": "ts-node scripts/deposit.ts",
     "heartbeat": "ts-node scripts/heartbeat.ts",
     "claim": "ts-node scripts/claim.ts",
-    "withdraw": "ts-node scripts/withdraw.ts"
+    "withdraw": "ts-node scripts/withdraw.ts",
+    "testnet:deploy": "bash scripts/testnet-v2-deploy.sh",
+    "testnet:smoke": "ts-node scripts/testnet-v2-smoke.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.30.1",
