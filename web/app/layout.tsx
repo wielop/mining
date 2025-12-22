@@ -1,5 +1,6 @@
 import "./globals.css";
 import "@solana/wallet-adapter-react-ui/styles.css";
+import "@/lib/initBuffer";
 import type { Metadata } from "next";
 import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { WalletProviders } from "@/components/WalletProviders";
