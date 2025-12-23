@@ -41,7 +41,6 @@ import { formatDurationSeconds, formatTokenAmount, parseUiAmountToBase, shortPk 
 import { formatError } from "@/lib/formatError";
 
 const ACC_SCALE = 1_000_000_000_000_000_000n;
-const AUTO_CLAIM_INTERVAL_MS = 60_000;
 const BPS_DENOMINATOR = 10_000n;
 const BADGE_BONUS_CAP_BPS = 2_000n;
 const CONTRACTS = [
@@ -90,7 +89,7 @@ export function PublicDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
-  const [autoClaimEnabled, setAutoClaimEnabled] = useState<boolean>(true);
+  const [autoClaimEngaged, setAutoClaimEngaged] = useState(false);
 
   const contract = CONTRACTS.find((c) => c.key === selectedContract) ?? CONTRACTS[0];
 
@@ -449,13 +448,12 @@ export function PublicDashboard() {
     });
   };
 
-  const autoClaimRunningRef = useRef(false);
   const autoClaimOnce = useCallback(async () => {
-    if (!autoClaimEnabled || autoClaimRunningRef.current || busy != null) return;
+    if (autoClaimEngaged || busy != null) return;
     if (!anchorWallet || !publicKey || !config) return;
     const claimTargets = pendingPositions.filter((entry) => entry.livePending > 0n);
     if (claimTargets.length === 0) return;
-    autoClaimRunningRef.current = true;
+    setAutoClaimEngaged(true);
     try {
       const program = getProgram(connection, anchorWallet);
       const { ata, ix } = await ensureAta(publicKey, config.mindMint);
@@ -482,11 +480,11 @@ export function PublicDashboard() {
     } catch (err) {
       console.error("Auto claim failed:", err);
     } finally {
-      autoClaimRunningRef.current = false;
+      setAutoClaimEngaged(false);
     }
   }, [
     anchorWallet,
-    autoClaimEnabled,
+    autoClaimEngaged,
     busy,
     connection,
     config,
@@ -494,19 +492,6 @@ export function PublicDashboard() {
     publicKey,
     refresh,
   ]);
-
-  useEffect(() => {
-    if (!autoClaimEnabled) return;
-    const id = window.setInterval(() => {
-      void autoClaimOnce();
-    }, AUTO_CLAIM_INTERVAL_MS);
-    return () => window.clearInterval(id);
-  }, [autoClaimEnabled, autoClaimOnce]);
-
-  useEffect(() => {
-    if (!autoClaimEnabled) return;
-    void autoClaimOnce();
-  }, [autoClaimEnabled, autoClaimOnce]);
 
   const onDeactivate = async (posPubkey: string, ownerBytes: Uint8Array) => {
     if (!anchorWallet || !config) return;
@@ -761,11 +746,12 @@ export function PublicDashboard() {
                 </Button>
                 <Button
                   size="sm"
-                  variant={autoClaimEnabled ? "secondary" : "ghost"}
-                  onClick={() => setAutoClaimEnabled((prev) => !prev)}
+                  variant="secondary"
+                  onClick={() => void autoClaimOnce()}
+                  disabled={autoClaimEngaged || busy != null}
                   className="text-[11px]"
                 >
-                  Auto {autoClaimEnabled ? "ON" : "OFF"}
+                  {autoClaimEngaged ? "Claiming..." : "Start claim ON"}
                 </Button>
               </div>
             </div>
