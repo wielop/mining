@@ -1,78 +1,92 @@
 {
   "version": "0.1.0",
   "name": "mining_v2",
+  "address": "uaDkkJGLLEY3kFMhhvrh5MZJ6fmwCmhNf8L7BZQJ9Aw",
   "instructions": [
     {
       "name": "initConfig",
       "accounts": [
         {
           "name": "payer",
-          "isMut": true,
-          "isSigner": true
+          "writable": true,
+          "signer": true
         },
         {
           "name": "admin",
-          "isMut": false,
-          "isSigner": true
+          "writable": false,
+          "signer": true
         },
         {
           "name": "vaultAuthority",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         },
         {
           "name": "config",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "mindMint",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         },
         {
           "name": "xntMint",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         },
         {
           "name": "stakingRewardVault",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         },
         {
           "name": "treasuryVault",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         },
         {
           "name": "stakingMindVault",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         },
         {
           "name": "tokenProgram",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         },
         {
           "name": "systemProgram",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         },
         {
           "name": "rent",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         }
       ],
       "args": [
         {
           "name": "params",
           "type": {
-            "defined": "InitConfigParams"
+            "defined": {
+              "name": "InitConfigParams",
+              "generics": []
+            }
           }
         }
+      ],
+      "discriminator": [
+        23,
+        235,
+        115,
+        232,
+        168,
+        96,
+        1,
+        231
       ]
     },
     {
@@ -80,58 +94,58 @@
       "accounts": [
         {
           "name": "owner",
-          "isMut": true,
-          "isSigner": true
+          "writable": true,
+          "signer": true
         },
         {
           "name": "config",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "userProfile",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "position",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "vaultAuthority",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         },
         {
           "name": "xntMint",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "stakingRewardVault",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "treasuryVault",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "ownerXntAta",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "tokenProgram",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         },
         {
           "name": "systemProgram",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         }
       ],
       "args": [
@@ -143,6 +157,16 @@
           "name": "positionIndex",
           "type": "u64"
         }
+      ],
+      "discriminator": [
+        176,
+        17,
+        17,
+        118,
+        221,
+        162,
+        68,
+        158
       ]
     },
     {
@@ -150,115 +174,135 @@
       "accounts": [
         {
           "name": "owner",
-          "isMut": true,
-          "isSigner": true
+          "writable": true,
+          "signer": true
         },
         {
           "name": "config",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "userProfile",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "position",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "vaultAuthority",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         },
         {
           "name": "mindMint",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "userMindAta",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "tokenProgram",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         }
       ],
-      "args": []
+      "args": [],
+      "discriminator": [
+        102,
+        203,
+        250,
+        155,
+        25,
+        85,
+        238,
+        33
+      ]
     },
     {
       "name": "deactivatePosition",
       "accounts": [
         {
           "name": "config",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "position",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "userProfile",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         }
       ],
-      "args": []
+      "args": [],
+      "discriminator": [
+        98,
+        73,
+        243,
+        134,
+        42,
+        133,
+        86,
+        99
+      ]
     },
     {
       "name": "stakeMind",
       "accounts": [
         {
           "name": "owner",
-          "isMut": true,
-          "isSigner": true
+          "writable": true,
+          "signer": true
         },
         {
           "name": "config",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "userProfile",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "userStake",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "vaultAuthority",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         },
         {
           "name": "stakingMindVault",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "ownerMindAta",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "tokenProgram",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         },
         {
           "name": "systemProgram",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         }
       ],
       "args": [
@@ -266,6 +310,16 @@
           "name": "amount",
           "type": "u64"
         }
+      ],
+      "discriminator": [
+        38,
+        117,
+        202,
+        80,
+        120,
+        47,
+        225,
+        111
       ]
     },
     {
@@ -273,38 +327,38 @@
       "accounts": [
         {
           "name": "owner",
-          "isMut": true,
-          "isSigner": true
+          "writable": true,
+          "signer": true
         },
         {
           "name": "config",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "userStake",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "vaultAuthority",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         },
         {
           "name": "stakingMindVault",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "ownerMindAta",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "tokenProgram",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         }
       ],
       "args": [
@@ -312,6 +366,16 @@
           "name": "amount",
           "type": "u64"
         }
+      ],
+      "discriminator": [
+        176,
+        4,
+        226,
+        138,
+        53,
+        203,
+        215,
+        141
       ]
     },
     {
@@ -319,64 +383,74 @@
       "accounts": [
         {
           "name": "owner",
-          "isMut": true,
-          "isSigner": true
+          "writable": true,
+          "signer": true
         },
         {
           "name": "config",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "userProfile",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "userStake",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "vaultAuthority",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         },
         {
           "name": "stakingRewardVault",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "ownerXntAta",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "tokenProgram",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         },
         {
           "name": "systemProgram",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         }
       ],
-      "args": []
+      "args": [],
+      "discriminator": [
+        207,
+        182,
+        68,
+        171,
+        224,
+        6,
+        236,
+        44
+      ]
     },
     {
       "name": "rollEpoch",
       "accounts": [
         {
           "name": "config",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "stakingRewardVault",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         }
       ],
       "args": [
@@ -384,6 +458,16 @@
           "name": "epochSeconds",
           "type": "u64"
         }
+      ],
+      "discriminator": [
+        17,
+        54,
+        176,
+        59,
+        34,
+        11,
+        253,
+        90
       ]
     },
     {
@@ -391,13 +475,13 @@
       "accounts": [
         {
           "name": "admin",
-          "isMut": true,
-          "isSigner": true
+          "writable": true,
+          "signer": true
         },
         {
           "name": "config",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         }
       ],
       "args": [
@@ -409,6 +493,16 @@
           "name": "maxEffectiveHp",
           "type": "u64"
         }
+      ],
+      "discriminator": [
+        224,
+        243,
+        100,
+        135,
+        120,
+        165,
+        43,
+        244
       ]
     },
     {
@@ -416,28 +510,28 @@
       "accounts": [
         {
           "name": "admin",
-          "isMut": true,
-          "isSigner": true
+          "writable": true,
+          "signer": true
         },
         {
           "name": "config",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "user",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         },
         {
           "name": "userProfile",
-          "isMut": true,
-          "isSigner": false
+          "writable": true,
+          "signer": false
         },
         {
           "name": "systemProgram",
-          "isMut": false,
-          "isSigner": false
+          "writable": false,
+          "signer": false
         }
       ],
       "args": [
@@ -449,6 +543,16 @@
           "name": "badgeBonusBps",
           "type": "u16"
         }
+      ],
+      "discriminator": [
+        178,
+        220,
+        254,
+        161,
+        192,
+        148,
+        194,
+        137
       ]
     }
   ],
@@ -460,7 +564,7 @@
         "fields": [
           {
             "name": "admin",
-            "type": "publicKey"
+            "type": "pubkey"
           },
           {
             "name": "emissionPerSec",
@@ -480,23 +584,23 @@
           },
           {
             "name": "mindMint",
-            "type": "publicKey"
+            "type": "pubkey"
           },
           {
             "name": "xntMint",
-            "type": "publicKey"
+            "type": "pubkey"
           },
           {
             "name": "stakingRewardVault",
-            "type": "publicKey"
+            "type": "pubkey"
           },
           {
             "name": "treasuryVault",
-            "type": "publicKey"
+            "type": "pubkey"
           },
           {
             "name": "stakingMindVault",
-            "type": "publicKey"
+            "type": "pubkey"
           },
           {
             "name": "maxEffectiveHp",
@@ -537,7 +641,10 @@
           {
             "name": "bumps",
             "type": {
-              "defined": "ConfigBumps"
+              "defined": {
+                "name": "ConfigBumps",
+                "generics": []
+              }
             }
           }
         ]
@@ -550,7 +657,7 @@
         "fields": [
           {
             "name": "owner",
-            "type": "publicKey"
+            "type": "pubkey"
           },
           {
             "name": "nextPositionIndex",
@@ -586,7 +693,7 @@
         "fields": [
           {
             "name": "owner",
-            "type": "publicKey"
+            "type": "pubkey"
           },
           {
             "name": "hp",
@@ -626,7 +733,7 @@
         "fields": [
           {
             "name": "owner",
-            "type": "publicKey"
+            "type": "pubkey"
           },
           {
             "name": "stakedMind",
@@ -692,7 +799,7 @@
       "fields": [
         {
           "name": "admin",
-          "type": "publicKey",
+          "type": "pubkey",
           "index": false
         },
         {
@@ -712,7 +819,7 @@
       "fields": [
         {
           "name": "owner",
-          "type": "publicKey",
+          "type": "pubkey",
           "index": false
         },
         {
@@ -737,7 +844,7 @@
       "fields": [
         {
           "name": "owner",
-          "type": "publicKey",
+          "type": "pubkey",
           "index": false
         },
         {
@@ -752,7 +859,7 @@
       "fields": [
         {
           "name": "owner",
-          "type": "publicKey",
+          "type": "pubkey",
           "index": false
         },
         {
@@ -767,7 +874,7 @@
       "fields": [
         {
           "name": "owner",
-          "type": "publicKey",
+          "type": "pubkey",
           "index": false
         },
         {
@@ -782,7 +889,7 @@
       "fields": [
         {
           "name": "owner",
-          "type": "publicKey",
+          "type": "pubkey",
           "index": false
         },
         {
@@ -871,6 +978,9 @@
     }
   ],
   "metadata": {
-    "address": "uaDkkJGLLEY3kFMhhvrh5MZJ6fmwCmhNf8L7BZQJ9Aw"
+    "address": "uaDkkJGLLEY3kFMhhvrh5MZJ6fmwCmhNf8L7BZQJ9Aw",
+    "name": "mining_v2",
+    "version": "0.1.0",
+    "spec": "1.0.0"
   }
 }

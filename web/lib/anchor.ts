@@ -8,6 +8,56 @@ import { getProgramId } from "@/lib/solana";
 // The IDL JSON in this repo does not include account sizes/types in `accounts`,
 // which breaks Anchor's `program.account.*` helpers. We only use `.methods`.
 const nonClientInstructions = ["initConfig"];
+
+type IdlAccountItem = { accounts?: IdlAccountItem[] } & Record<string, unknown>;
+
+const normalizeIdl = (raw: unknown): anchor.Idl => {
+  const clone = JSON.parse(JSON.stringify(raw)) as Record<string, unknown>;
+  const fixDefined = (value: unknown): unknown => {
+    if (Array.isArray(value)) {
+      return value.map(fixDefined);
+    }
+    if (value && typeof value === "object") {
+      const record = value as Record<string, unknown>;
+      if (typeof record.defined === "string") {
+        record.defined = { name: record.defined, generics: [] };
+      }
+      for (const key of Object.keys(record)) {
+        record[key] = fixDefined(record[key]);
+      }
+      return record;
+    }
+    if (typeof value === "string") {
+      return value === "publicKey" ? "pubkey" : value;
+    }
+    return value;
+  };
+  const normalizeAccounts = (items: IdlAccountItem[]): IdlAccountItem[] =>
+    items.map((item): IdlAccountItem => {
+      if (Array.isArray(item.accounts)) {
+        return { ...item, accounts: normalizeAccounts(item.accounts) };
+      }
+      const { isMut, isSigner, ...rest } = item;
+      return {
+        ...rest,
+        ...(isMut === undefined ? {} : { writable: isMut }),
+        ...(isSigner === undefined ? {} : { signer: isSigner }),
+      };
+    });
+
+  const idlValue = fixDefined(clone) as anchor.Idl;
+  const instructions = idlValue.instructions;
+  if (Array.isArray(instructions)) {
+    for (const ix of instructions) {
+      if (ix && typeof ix === "object" && Array.isArray((ix as IdlAccountItem).accounts)) {
+        (ix as IdlAccountItem).accounts = normalizeAccounts(
+          (ix as IdlAccountItem).accounts as IdlAccountItem[]
+        );
+      }
+    }
+  }
+  return idlValue;
+};
 const toSnakeCase = (value: string) =>
   value
     .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
@@ -23,11 +73,12 @@ const normalizeDiscriminator = (name: string, discriminator: unknown) => {
   if (Array.isArray(discriminator)) return Uint8Array.from(discriminator);
   return instructionDiscriminator(name);
 };
+const normalizedIdl = normalizeIdl(idl);
 const idlForClient = {
-  ...idl,
+  ...normalizedIdl,
   // Ensure the Program ID matches the runtime config.
   address: getProgramId().toBase58(),
-  instructions: (idl.instructions ?? [])
+  instructions: (normalizedIdl.instructions ?? [])
     .filter((ix) => !nonClientInstructions.includes(ix.name))
     .map((ix) => {
       const disc = (ix as { discriminator?: unknown }).discriminator;
