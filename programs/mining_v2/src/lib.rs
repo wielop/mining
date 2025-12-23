@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Mint, MintTo, Token, TokenAccount, Transfer};
+use anchor_spl::token::{self, Burn, Mint, MintTo, Token, TokenAccount, Transfer};
 use solana_program::program_option::COption;
 
 declare_id!("uaDkkJGLLEY3kFMhhvrh5MZJ6fmwCmhNf8L7BZQJ9Aw");
@@ -15,6 +15,7 @@ const ACC_SCALE: u128 = 1_000_000_000_000_000_000;
 const SECONDS_PER_DAY_DEFAULT: u64 = 86_400;
 const STAKING_SHARE_BPS: u128 = 3_000; // 30%
 const BADGE_BONUS_CAP_BPS: u16 = 2_000; // 20%
+const UNSTAKE_BURN_BPS: u128 = 300; // 3%
 
 #[program]
 pub mod mining_v2 {
@@ -31,7 +32,8 @@ pub mod mining_v2 {
         require!(seconds_per_day > 0, ErrorCode::InvalidAmount);
 
         require!(
-            ctx.accounts.mind_mint.mint_authority == COption::Some(ctx.accounts.vault_authority.key()),
+            ctx.accounts.mind_mint.mint_authority
+                == COption::Some(ctx.accounts.vault_authority.key()),
             ErrorCode::InvalidMintAuthority
         );
 
@@ -72,7 +74,11 @@ pub mod mining_v2 {
         Ok(())
     }
 
-    pub fn buy_contract(ctx: Context<BuyContract>, contract_type: u8, position_index: u64) -> Result<()> {
+    pub fn buy_contract(
+        ctx: Context<BuyContract>,
+        contract_type: u8,
+        position_index: u64,
+    ) -> Result<()> {
         let now = Clock::get()?.unix_timestamp;
         let cfg = &mut ctx.accounts.config;
         update_mining_global(cfg, now)?;
@@ -196,7 +202,11 @@ pub mod mining_v2 {
         let cfg = &mut ctx.accounts.config;
         let position = &mut ctx.accounts.position;
 
-        require_keys_eq!(position.owner, ctx.accounts.owner.key(), ErrorCode::Unauthorized);
+        require_keys_eq!(
+            position.owner,
+            ctx.accounts.owner.key(),
+            ErrorCode::Unauthorized
+        );
 
         if !position.deactivated && now >= position.end_ts {
             finalize_position(cfg, position, &mut ctx.accounts.user_profile, now)?;
@@ -278,7 +288,11 @@ pub mod mining_v2 {
             ctx.accounts.user_stake.reward_owed = 0;
             ctx.accounts.user_stake.bump = *ctx.bumps.get("user_stake").unwrap();
         }
-        require_keys_eq!(ctx.accounts.user_stake.owner, ctx.accounts.owner.key(), ErrorCode::Unauthorized);
+        require_keys_eq!(
+            ctx.accounts.user_stake.owner,
+            ctx.accounts.owner.key(),
+            ErrorCode::Unauthorized
+        );
 
         accrue_staking_owed(cfg, &mut ctx.accounts.user_stake)?;
 
@@ -340,19 +354,45 @@ pub mod mining_v2 {
             .checked_sub(amount)
             .ok_or(ErrorCode::MathOverflow)?;
 
+        let burn_amount = (amount as u128)
+            .checked_mul(UNSTAKE_BURN_BPS)
+            .ok_or(ErrorCode::MathOverflow)?
+            .checked_div(BPS_DENOMINATOR)
+            .ok_or(ErrorCode::MathOverflow)?;
+        let burn_amount = u64::try_from(burn_amount).map_err(|_| ErrorCode::MathOverflow)?;
+        let transfer_amount = amount
+            .checked_sub(burn_amount)
+            .ok_or(ErrorCode::MathOverflow)?;
+
         let signer_seeds: &[&[u8]] = &[VAULT_SEED, &[cfg.bumps.vault_authority]];
-        token::transfer(
-            CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
-                Transfer {
-                    from: ctx.accounts.staking_mind_vault.to_account_info(),
-                    to: ctx.accounts.owner_mind_ata.to_account_info(),
-                    authority: ctx.accounts.vault_authority.to_account_info(),
-                },
-                &[signer_seeds],
-            ),
-            amount,
-        )?;
+        if burn_amount > 0 {
+            token::burn(
+                CpiContext::new_with_signer(
+                    ctx.accounts.token_program.to_account_info(),
+                    Burn {
+                        mint: ctx.accounts.mind_mint.to_account_info(),
+                        from: ctx.accounts.staking_mind_vault.to_account_info(),
+                        authority: ctx.accounts.vault_authority.to_account_info(),
+                    },
+                    &[signer_seeds],
+                ),
+                burn_amount,
+            )?;
+        }
+        if transfer_amount > 0 {
+            token::transfer(
+                CpiContext::new_with_signer(
+                    ctx.accounts.token_program.to_account_info(),
+                    Transfer {
+                        from: ctx.accounts.staking_mind_vault.to_account_info(),
+                        to: ctx.accounts.owner_mind_ata.to_account_info(),
+                        authority: ctx.accounts.vault_authority.to_account_info(),
+                    },
+                    &[signer_seeds],
+                ),
+                transfer_amount,
+            )?;
+        }
 
         ctx.accounts.user_stake.reward_debt = earned_per_stake(
             ctx.accounts.user_stake.staked_mind,
@@ -409,8 +449,10 @@ pub mod mining_v2 {
         )?;
 
         ctx.accounts.user_stake.reward_owed = 0;
-        ctx.accounts.user_stake.reward_debt =
-            earned_per_stake(ctx.accounts.user_stake.staked_mind, cfg.staking_acc_xnt_per_mind)?;
+        ctx.accounts.user_stake.reward_debt = earned_per_stake(
+            ctx.accounts.user_stake.staked_mind,
+            cfg.staking_acc_xnt_per_mind,
+        )?;
 
         cfg.staking_accounted_balance = cfg
             .staking_accounted_balance
@@ -509,7 +551,11 @@ pub mod mining_v2 {
             profile.xp = 0;
             profile.bump = *ctx.bumps.get("user_profile").unwrap();
         }
-        require_keys_eq!(profile.owner, ctx.accounts.user.key(), ErrorCode::Unauthorized);
+        require_keys_eq!(
+            profile.owner,
+            ctx.accounts.user.key(),
+            ErrorCode::Unauthorized
+        );
         profile.badge_tier = badge_tier;
         profile.badge_bonus_bps = badge_bonus_bps.min(BADGE_BONUS_CAP_BPS);
         Ok(())
@@ -577,7 +623,6 @@ pub struct BuyContract<'info> {
     )]
     pub config: Box<Account<'info, Config>>,
     #[account(
-        mut,
         init_if_needed,
         payer = owner,
         space = 8 + UserMiningProfile::INIT_SPACE,
@@ -686,7 +731,6 @@ pub struct StakeMind<'info> {
     )]
     pub config: Box<Account<'info, Config>>,
     #[account(
-        mut,
         init_if_needed,
         payer = owner,
         space = 8 + UserMiningProfile::INIT_SPACE,
@@ -695,7 +739,6 @@ pub struct StakeMind<'info> {
     )]
     pub user_profile: Box<Account<'info, UserMiningProfile>>,
     #[account(
-        mut,
         init_if_needed,
         payer = owner,
         space = 8 + UserStake::INIT_SPACE,
@@ -752,6 +795,11 @@ pub struct UnstakeMind<'info> {
     pub staking_mind_vault: Account<'info, TokenAccount>,
     #[account(
         mut,
+        constraint = config.mind_mint == mind_mint.key()
+    )]
+    pub mind_mint: Account<'info, Mint>,
+    #[account(
+        mut,
         constraint = owner_mind_ata.owner == owner.key(),
         constraint = owner_mind_ata.mint == config.mind_mint
     )]
@@ -770,7 +818,6 @@ pub struct ClaimXnt<'info> {
     )]
     pub config: Box<Account<'info, Config>>,
     #[account(
-        mut,
         init_if_needed,
         payer = owner,
         space = 8 + UserMiningProfile::INIT_SPACE,
@@ -845,7 +892,6 @@ pub struct AdminSetBadge<'info> {
     /// CHECK: used only for PDA derivation
     pub user: UncheckedAccount<'info>,
     #[account(
-        mut,
         init_if_needed,
         payer = admin,
         space = 8 + UserMiningProfile::INIT_SPACE,
@@ -972,16 +1018,8 @@ fn contract_terms(contract_type: u8, xnt_decimals: u8) -> Result<(u64, u64, u64)
     let base = ten_pow(xnt_decimals)?;
     match contract_type {
         0 => Ok((7, 1, base)),
-        1 => Ok((
-            14,
-            5,
-            base.checked_mul(10).ok_or(ErrorCode::MathOverflow)?,
-        )),
-        2 => Ok((
-            28,
-            7,
-            base.checked_mul(20).ok_or(ErrorCode::MathOverflow)?,
-        )),
+        1 => Ok((14, 5, base.checked_mul(10).ok_or(ErrorCode::MathOverflow)?)),
+        2 => Ok((28, 7, base.checked_mul(20).ok_or(ErrorCode::MathOverflow)?)),
         _ => Err(error!(ErrorCode::InvalidContractType)),
     }
 }
