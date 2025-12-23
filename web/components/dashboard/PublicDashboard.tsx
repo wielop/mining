@@ -325,6 +325,10 @@ export function PublicDashboard() {
     const rewards7d = config.stakingRewardRateXntPerSec * 86_400n * 7n;
     return (rewards7d * 1_000n) / config.stakingTotalStakedMind;
   }, [config]);
+  const stakingSharePct = useMemo(() => {
+    if (!config || !userStake || config.stakingTotalStakedMind === 0n) return null;
+    return Number((userStake.stakedMind * 10_000n) / config.stakingTotalStakedMind) / 100;
+  }, [config, userStake]);
   const totalClaimedMind = mindBalance + (userStake?.stakedMind ?? 0n);
   const secondsPerDayNumber = config ? Number(config.secondsPerDay) : 86_400;
   const secondsIntoDay =
@@ -868,6 +872,9 @@ export function PublicDashboard() {
                 {userStake && mintDecimals
                   ? `${formatTokenAmount(userStake.stakedMind, mintDecimals.mind, 4)} MIND`
                   : "-"}
+              </div>
+              <div>
+                Your staking share: {stakingSharePct != null ? `${stakingSharePct.toFixed(2)}%` : "-"}
               </div>
             </div>
           </Card>
