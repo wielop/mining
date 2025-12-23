@@ -1,7 +1,7 @@
 "use client";
 
 import "@/lib/polyfillBufferClient";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAnchorWallet, useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { BN } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
@@ -41,6 +41,7 @@ import { formatDurationSeconds, formatTokenAmount, parseUiAmountToBase, shortPk 
 import { formatError } from "@/lib/formatError";
 
 const ACC_SCALE = 1_000_000_000_000_000_000n;
+const AUTO_CLAIM_INTERVAL_MS = 60_000;
 const BPS_DENOMINATOR = 10_000n;
 const BADGE_BONUS_CAP_BPS = 2_000n;
 const CONTRACTS = [
@@ -89,6 +90,7 @@ export function PublicDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [autoClaimEnabled, setAutoClaimEnabled] = useState<boolean>(true);
 
   const contract = CONTRACTS.find((c) => c.key === selectedContract) ?? CONTRACTS[0];
 
@@ -390,9 +392,9 @@ export function PublicDashboard() {
     const nextIndex = userProfile?.nextPositionIndex ?? BigInt(positions.length);
     const positionIndex = new BN(nextIndex.toString());
     await withTx("Buy contract", async () => {
-      const ix = await ensureAta(publicKey, config.xntMint);
+      const { ata, ix } = await ensureAta(publicKey, config.xntMint);
       const tx = new Transaction();
-      if (ix.ix) tx.add(ix.ix);
+      if (ix) tx.add(ix);
       const sig = await program.methods
         .buyContract(contract.key, positionIndex)
         .accounts({
@@ -404,7 +406,7 @@ export function PublicDashboard() {
           xntMint: config.xntMint,
           stakingRewardVault: config.stakingRewardVault,
           treasuryVault: config.treasuryVault,
-          ownerXntAta: ix.ata,
+          ownerXntAta: ata,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
@@ -423,9 +425,9 @@ export function PublicDashboard() {
       return;
     }
     await withTx("Claim all rigs", async () => {
-      const ix = await ensureAta(publicKey, config.mindMint);
+      const { ata, ix } = await ensureAta(publicKey, config.mindMint);
       const tx = new Transaction();
-      if (ix.ix) tx.add(ix.ix);
+      if (ix) tx.add(ix);
       for (const entry of claimTargets) {
         const instruction = await program.methods
           .claimMind()
@@ -436,7 +438,7 @@ export function PublicDashboard() {
             position: new PublicKey(entry.position.pubkey),
             vaultAuthority: deriveVaultPda(),
             mindMint: config.mindMint,
-            userMindAta: ix.ata,
+            userMindAta: ata,
             tokenProgram: TOKEN_PROGRAM_ID,
           })
           .instruction();
@@ -446,6 +448,65 @@ export function PublicDashboard() {
       return sig;
     });
   };
+
+  const autoClaimRunningRef = useRef(false);
+  const autoClaimOnce = useCallback(async () => {
+    if (!autoClaimEnabled || autoClaimRunningRef.current || busy != null) return;
+    if (!anchorWallet || !publicKey || !config) return;
+    const claimTargets = pendingPositions.filter((entry) => entry.livePending > 0n);
+    if (claimTargets.length === 0) return;
+    autoClaimRunningRef.current = true;
+    try {
+      const program = getProgram(connection, anchorWallet);
+      const { ata, ix } = await ensureAta(publicKey, config.mindMint);
+      const tx = new Transaction();
+      if (ix) tx.add(ix);
+      for (const entry of claimTargets) {
+        const instruction = await program.methods
+          .claimMind()
+          .accounts({
+            owner: publicKey,
+            config: deriveConfigPda(),
+            userProfile: deriveUserProfilePda(publicKey),
+            position: new PublicKey(entry.position.pubkey),
+            vaultAuthority: deriveVaultPda(),
+            mindMint: config.mindMint,
+            userMindAta: ata,
+            tokenProgram: TOKEN_PROGRAM_ID,
+          })
+          .instruction();
+        tx.add(instruction);
+      }
+      await program.provider.sendAndConfirm(tx, []);
+      await refresh();
+    } catch (err) {
+      console.error("Auto claim failed:", err);
+    } finally {
+      autoClaimRunningRef.current = false;
+    }
+  }, [
+    anchorWallet,
+    autoClaimEnabled,
+    busy,
+    connection,
+    config,
+    pendingPositions,
+    publicKey,
+    refresh,
+  ]);
+
+  useEffect(() => {
+    if (!autoClaimEnabled) return;
+    const id = window.setInterval(() => {
+      void autoClaimOnce();
+    }, AUTO_CLAIM_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, [autoClaimEnabled, autoClaimOnce]);
+
+  useEffect(() => {
+    if (!autoClaimEnabled) return;
+    void autoClaimOnce();
+  }, [autoClaimEnabled, autoClaimOnce]);
 
   const onDeactivate = async (posPubkey: string, ownerBytes: Uint8Array) => {
     if (!anchorWallet || !config) return;
@@ -475,9 +536,9 @@ export function PublicDashboard() {
     if (amountBase <= 0n) return;
     const program = getProgram(connection, anchorWallet);
     await withTx("Stake MIND", async () => {
-      const ix = await ensureAta(publicKey, config.mindMint);
+      const { ata, ix } = await ensureAta(publicKey, config.mindMint);
       const tx = new Transaction();
-      if (ix.ix) tx.add(ix.ix);
+      if (ix) tx.add(ix);
       const sig = await program.methods
         .stakeMind(new BN(amountBase.toString()))
         .accounts({
@@ -487,7 +548,7 @@ export function PublicDashboard() {
           userStake: deriveUserStakePda(publicKey),
           vaultAuthority: deriveVaultPda(),
           stakingMindVault: config.stakingMindVault,
-          ownerMindAta: ix.ata,
+          ownerMindAta: ata,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
@@ -509,9 +570,9 @@ export function PublicDashboard() {
     if (amountBase <= 0n) return;
     const program = getProgram(connection, anchorWallet);
     await withTx("Unstake MIND", async () => {
-      const ix = await ensureAta(publicKey, config.mindMint);
+      const { ata, ix } = await ensureAta(publicKey, config.mindMint);
       const tx = new Transaction();
-      if (ix.ix) tx.add(ix.ix);
+      if (ix) tx.add(ix);
       const sig = await program.methods
         .unstakeMind(new BN(amountBase.toString()))
         .accounts({
@@ -520,7 +581,7 @@ export function PublicDashboard() {
           userStake: deriveUserStakePda(publicKey),
           vaultAuthority: deriveVaultPda(),
           stakingMindVault: config.stakingMindVault,
-          ownerMindAta: ix.ata,
+          ownerMindAta: ata,
           tokenProgram: TOKEN_PROGRAM_ID,
         })
         .preInstructions(tx.instructions)
@@ -533,9 +594,9 @@ export function PublicDashboard() {
     if (!anchorWallet || !publicKey || !config) return;
     const program = getProgram(connection, anchorWallet);
     await withTx("Claim XNT", async () => {
-      const ix = await ensureAta(publicKey, config.xntMint);
+      const { ata, ix } = await ensureAta(publicKey, config.xntMint);
       const tx = new Transaction();
-      if (ix.ix) tx.add(ix.ix);
+      if (ix) tx.add(ix);
       const sig = await program.methods
         .claimXnt()
         .accounts({
@@ -545,7 +606,7 @@ export function PublicDashboard() {
           userStake: deriveUserStakePda(publicKey),
           vaultAuthority: deriveVaultPda(),
           stakingRewardVault: config.stakingRewardVault,
-          ownerXntAta: ix.ata,
+          ownerXntAta: ata,
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
@@ -690,13 +751,23 @@ export function PublicDashboard() {
                 <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Mining Positions</div>
                 <div className="mt-2 text-2xl font-semibold">Your rigs</div>
               </div>
-              <Button
-                size="sm"
-                onClick={() => void onClaimAll()}
-                disabled={claimAllDisabled}
-              >
-                {busy === "Claim all rigs" ? "Claiming..." : "Claim all rigs"}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => void onClaimAll()}
+                  disabled={claimAllDisabled}
+                >
+                  {busy === "Claim all rigs" ? "Claiming..." : "Claim all rigs"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant={autoClaimEnabled ? "secondary" : "ghost"}
+                  onClick={() => setAutoClaimEnabled((prev) => !prev)}
+                  className="text-[11px]"
+                >
+                  Auto {autoClaimEnabled ? "ON" : "OFF"}
+                </Button>
+              </div>
             </div>
             <div className="mt-4 grid gap-3">
               {positions.length === 0 ? (
