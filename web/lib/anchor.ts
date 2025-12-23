@@ -8,8 +8,13 @@ import { getProgramId } from "@/lib/solana";
 // The IDL JSON in this repo does not include account sizes/types in `accounts`,
 // which breaks Anchor's `program.account.*` helpers. We only use `.methods`.
 const nonClientInstructions = ["initConfig"];
+const toSnakeCase = (value: string) =>
+  value
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/-/g, "_")
+    .toLowerCase();
 const instructionDiscriminator = (name: string) => {
-  const data = new TextEncoder().encode(`global:${name}`);
+  const data = new TextEncoder().encode(`global:${toSnakeCase(name)}`);
   return sha256(data).slice(0, 8);
 };
 
