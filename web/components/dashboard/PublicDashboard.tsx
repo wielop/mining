@@ -273,12 +273,31 @@ export function PublicDashboard() {
   const livePendingMind =
     totalPendingMind + (userHp * extraAccSinceRefresh) / ACC_SCALE;
 
+  const stakingAccNow = useMemo(() => {
+    if (!config || nowTs == null) return config?.stakingAccXntPerMind ?? 0n;
+    if (config.stakingRewardRateXntPerSec === 0n || config.stakingTotalStakedMind === 0n) {
+      return config.stakingAccXntPerMind;
+    }
+    const currentTs = BigInt(nowTs);
+    const epochEnd = BigInt(config.stakingEpochEndTs);
+    const lastUpdate = BigInt(config.stakingLastUpdateTs);
+    const effectiveEnd = currentTs < epochEnd ? currentTs : epochEnd;
+    if (effectiveEnd <= lastUpdate) {
+      return config.stakingAccXntPerMind;
+    }
+    const dt = effectiveEnd - lastUpdate;
+    const mintable = dt * config.stakingRewardRateXntPerSec;
+    const delta =
+      mintable * ACC_SCALE / config.stakingTotalStakedMind;
+    return config.stakingAccXntPerMind + delta;
+  }, [config, nowTs]);
+
   const basePendingXnt = useMemo(() => {
     if (!config || !userStake) return 0n;
-    const earned = (userStake.stakedMind * config.stakingAccXntPerMind) / ACC_SCALE;
+    const earned = (userStake.stakedMind * stakingAccNow) / ACC_SCALE;
     const pending = earned > userStake.rewardDebt ? earned - userStake.rewardDebt : 0n;
     return pending + userStake.rewardOwed;
-  }, [config, userStake]);
+  }, [config, userStake, stakingAccNow]);
 
   const badgeBonusBps = userProfile?.badgeBonusBps ?? 0;
   const effectiveBonusBps = Math.min(badgeBonusBps, Number(BADGE_BONUS_CAP_BPS));
