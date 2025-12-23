@@ -376,31 +376,6 @@ export function PublicDashboard() {
     });
   };
 
-  const onClaim = async (posPubkey: string) => {
-    if (!anchorWallet || !publicKey || !config) return;
-    const program = getProgram(connection, anchorWallet);
-    await withTx("Claim MIND", async () => {
-      const ix = await ensureAta(publicKey, config.mindMint);
-      const tx = new Transaction();
-      if (ix.ix) tx.add(ix.ix);
-      const sig = await program.methods
-        .claimMind()
-        .accounts({
-          owner: publicKey,
-          config: deriveConfigPda(),
-          userProfile: deriveUserProfilePda(publicKey),
-          position: new PublicKey(posPubkey),
-          vaultAuthority: deriveVaultPda(),
-          mindMint: config.mindMint,
-          userMindAta: ix.ata,
-          tokenProgram: TOKEN_PROGRAM_ID,
-        })
-        .preInstructions(tx.instructions)
-        .rpc();
-      return sig;
-    });
-  };
-
   const onClaimAll = async () => {
     if (!anchorWallet || !publicKey || !config) return;
     const program = getProgram(connection, anchorWallet);
@@ -710,13 +685,6 @@ export function PublicDashboard() {
                         </div>
                       ) : null}
                       <div className="mt-3 flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => void onClaim(p.pubkey)}
-                          disabled={busy != null || pending === 0n}
-                        >
-                          Claim
-                        </Button>
                         <Button size="sm" onClick={() => void onDeactivate(p.pubkey, p.data.owner)} disabled={busy != null || !expired}>
                           Deactivate
                         </Button>
