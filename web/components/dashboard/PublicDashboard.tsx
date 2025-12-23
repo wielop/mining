@@ -246,18 +246,6 @@ export function PublicDashboard() {
   const networkHp = config?.networkHpActive ?? 0n;
   const sharePct = networkHp > 0n ? Number((effectiveUserHp * 10_000n) / networkHp) / 100 : 0;
 
-  const pendingByPosition = useMemo(() => {
-    if (!config) return [] as Array<bigint>;
-    return positions.map((p) => {
-      const acc = p.data.deactivated ? p.data.finalAccMindPerHp : config.accMindPerHp;
-      const earned = (p.data.hp * acc) / ACC_SCALE;
-      const pending = earned > p.data.rewardDebt ? earned - p.data.rewardDebt : 0n;
-      return pending;
-    });
-  }, [positions, config]);
-
-  const totalPendingMind = pendingByPosition.reduce((acc, v) => acc + v, 0n);
-
   const accrualPerSecond = useMemo(() => {
     if (!config || config.networkHpActive === 0n) return 0n;
     return (config.emissionPerSec * ACC_SCALE) / config.networkHpActive;
@@ -267,6 +255,21 @@ export function PublicDashboard() {
     nowTs != null && lastRefreshNowTs != null ? Math.max(0, nowTs - lastRefreshNowTs) : 0;
   const elapsedSinceRefreshBig = BigInt(elapsedSinceRefresh);
   const extraAccSinceRefresh = accrualPerSecond * elapsedSinceRefreshBig;
+
+  const pendingPositions = useMemo(() => {
+    return positions.map((p) => {
+      if (!config) {
+        return { position: p, pending: 0n, livePending: 0n };
+      }
+      const acc = p.data.deactivated ? p.data.finalAccMindPerHp : config.accMindPerHp;
+      const earned = (p.data.hp * acc) / ACC_SCALE;
+      const pending = earned > p.data.rewardDebt ? earned - p.data.rewardDebt : 0n;
+      const livePending = pending + (p.data.hp * extraAccSinceRefresh) / ACC_SCALE;
+      return { position: p, pending, livePending };
+    });
+  }, [positions, config, extraAccSinceRefresh]);
+
+  const totalPendingMind = pendingPositions.reduce((acc, entry) => acc + entry.pending, 0n);
   const livePendingMind =
     totalPendingMind + (userHp * extraAccSinceRefresh) / ACC_SCALE;
 
@@ -395,12 +398,7 @@ export function PublicDashboard() {
   const onClaimAll = async () => {
     if (!anchorWallet || !publicKey || !config) return;
     const program = getProgram(connection, anchorWallet);
-    const claimTargets = positions
-      .map((p, idx) => ({
-        position: p,
-        pending: pendingByPosition[idx] ?? 0n,
-      }))
-      .filter((entry) => entry.pending > 0n);
+    const claimTargets = pendingPositions.filter((entry) => entry.livePending > 0n);
     if (claimTargets.length === 0) {
       setError("No pending MIND to claim");
       return;
@@ -685,13 +683,13 @@ export function PublicDashboard() {
               {positions.length === 0 ? (
                 <div className="text-xs text-zinc-500">No positions yet.</div>
               ) : (
-                positions.map((p, idx) => {
-                const pending = pendingByPosition[idx] ?? 0n;
-                const livePending =
-                  pending + (p.data.hp * extraAccSinceRefresh) / ACC_SCALE;
-                const remaining = nowTs ? Math.max(0, p.data.endTs - nowTs) : null;
-                const expired = nowTs != null && nowTs >= p.data.endTs;
-                return (
+                pendingPositions.map((entry) => {
+                  const p = entry.position;
+                  const pending = entry.pending;
+                  const livePending = entry.livePending;
+                  const remaining = nowTs ? Math.max(0, p.data.endTs - nowTs) : null;
+                  const expired = nowTs != null && nowTs >= p.data.endTs;
+                  return (
                     <div key={p.pubkey} className="rounded-2xl border border-white/10 bg-white/5 p-3">
                       <div className="flex items-center justify-between">
                         <div className="text-sm text-zinc-200">HP {p.data.hp.toString()}</div>
