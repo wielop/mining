@@ -635,10 +635,10 @@ export function PublicDashboard() {
             "Accrued MIND"
           )}
           {statValue(
-            config && mintDecimals
-              ? `${formatTokenAmount(lastClaimedMind, mintDecimals.mind, 4)} MIND`
+            mindBalance != null && mintDecimals
+              ? `${formatTokenAmount(mindBalance, mintDecimals.mind, 4)} MIND`
               : "-",
-            "Ostatnio odebrałeś"
+            "Wallet MIND"
           )}
           {statValue(
             config && mintDecimals
