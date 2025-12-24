@@ -820,7 +820,7 @@ export function PublicDashboard() {
                   size="sm"
                   variant={autoClaimEnabled ? "secondary" : "ghost"}
                   onClick={() => setAutoClaimEnabled((prev) => !prev)}
-                  disabled={claimDisabled || autoClaimEngaged}
+                  disabled={autoClaimEngaged}
                   className="text-[11px]"
                   title="Collect all unclaimed MIND from your active rigs."
                 >
