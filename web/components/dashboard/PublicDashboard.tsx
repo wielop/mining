@@ -610,7 +610,7 @@ export function PublicDashboard() {
 
   return (
     <div className="min-h-screen bg-ink text-white">
-      <TopBar title="Mining V2" subtitle="Pro-rata emission + staking rewards" link={{ href: "/admin", label: "Admin" }} />
+      <TopBar title="Mining V2" subtitle="Pro-rata emission + staking rewards" />
 
       <main className="mx-auto max-w-6xl px-4 pb-24 pt-10">
         <div className="space-y-4">
