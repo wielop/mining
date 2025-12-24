@@ -335,11 +335,6 @@ export function PublicDashboard() {
     return remaining;
   }, [config, nowTs]);
 
-  const estRewardsPer1k = useMemo(() => {
-    if (!config || config.stakingTotalStakedMind === 0n) return null;
-    const rewards7d = config.stakingRewardRateXntPerSec * 86_400n * 7n;
-    return (rewards7d * 1_000n) / config.stakingTotalStakedMind;
-  }, [config]);
   const stakingSharePct = useMemo(() => {
     if (!config || !userStake || config.stakingTotalStakedMind === 0n) return null;
     return Number((userStake.stakedMind * 10_000n) / config.stakingTotalStakedMind) / 100;
@@ -360,6 +355,13 @@ export function PublicDashboard() {
     config && secondsPerDayNumber > 0
       ? config.emissionPerSec * BigInt(secondsPerDayNumber)
       : 0n;
+
+  const estimatedStakingPerDay = config ? config.stakingRewardRateXntPerSec * 86_400n : 0n;
+  const sevenDayAverageXnt = config ? (config.stakingRewardRateXntPerSec * 604_800n) / 7n : 0n;
+  const userStakeRounded =
+    mintDecimals && userStake
+      ? formatRoundedToken(userStake.stakedMind, mintDecimals.mind)
+      : "-";
 
   const claimableRounded =
     mintDecimals != null ? formatRoundedToken(totalPendingMind, mintDecimals.mind) : "-";
@@ -846,15 +848,21 @@ export function PublicDashboard() {
         <section className="mt-10 grid gap-6 lg:grid-cols-[1fr_1fr]">
           <Card className="border-emerald-400/20 bg-ink/90 p-6">
             <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Staking</div>
-            <div className="mt-2 text-2xl font-semibold">Stake MIND</div>
+            <div className="mt-2 text-2xl font-semibold">Stake MIND → Earn XNT</div>
+            <div className="mt-1 text-xs text-zinc-400">
+              Rewards are funded from mining purchases (30% of revenue).
+            </div>
             <div className="mt-3 text-xs text-zinc-400">
-              Pending rewards: {mintDecimals ? formatTokenAmount(finalPendingXnt, mintDecimals.xnt, 4) : "-"} XNT
+              Claimable: {mintDecimals ? formatTokenAmount(finalPendingXnt, mintDecimals.xnt, 4) : "-"} XNT
+            </div>
+            <div className="text-[11px] text-zinc-500">
+              Rewards accrue continuously. Your rewards depend on your share of the staking pool.
             </div>
             <div className="mt-4">
               <Input
                 value={stakeAmountUi}
                 onChange={setStakeAmountUi}
-                placeholder="Amount (MIND)"
+                placeholder="Amount to stake (MIND)"
               />
               <Button
                 className="mt-3"
@@ -863,6 +871,9 @@ export function PublicDashboard() {
               >
                 {busy === "Stake MIND" ? "Submitting..." : "Stake"}
               </Button>
+              <div className="mt-2 text-[11px] text-zinc-500">
+                Staked MIND can be unstaked at any time.
+              </div>
             </div>
             <div className="mt-6">
               <Input
@@ -875,7 +886,11 @@ export function PublicDashboard() {
               </Button>
             </div>
             <div className="mt-6">
-              <Button onClick={() => void onClaimXnt()} disabled={busy != null || finalPendingXnt === 0n}>
+              <Button
+                onClick={() => void onClaimXnt()}
+                disabled={busy != null || finalPendingXnt === 0n}
+                title="Collect rewards. Your MIND stays staked."
+              >
                 {busy === "Claim XNT" ? "Claiming..." : "Claim XNT"}
               </Button>
             </div>
@@ -884,27 +899,27 @@ export function PublicDashboard() {
           <Card className="border-emerald-400/20 bg-ink/90 p-6">
             <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Pool stats</div>
             <div className="mt-2 text-2xl font-semibold">Rewards</div>
-            <div className="mt-4 grid gap-2 text-xs text-zinc-400">
+            <div className="mt-4 space-y-2 text-xs text-zinc-400">
               <div>
-                Reward rate:{" "}
-                {config && mintDecimals
-                  ? `${formatTokenAmount(config.stakingRewardRateXntPerSec, mintDecimals.xnt, 6)} XNT/sec`
+                Estimated per day:{" "}
+                {mintDecimals
+                  ? `${formatRoundedToken(estimatedStakingPerDay, mintDecimals.xnt)} XNT/day`
                   : "-"}
               </div>
               <div>
-                7d est per 1k MIND: {mintDecimals && estRewardsPer1k
-                  ? `${formatTokenAmount(estRewardsPer1k, mintDecimals.xnt, 4)} XNT`
-                  : "-"}
-              </div>
-              <div>Epoch ends in: {epochCountdown != null ? formatDurationSeconds(epochCountdown) : "-"}</div>
-              <div>
-                Your staked:{" "}
-                {userStake && mintDecimals
-                  ? `${formatTokenAmount(userStake.stakedMind, mintDecimals.mind, 4)} MIND`
+                7-day average:{" "}
+                {mintDecimals
+                  ? `${formatRoundedToken(sevenDayAverageXnt, mintDecimals.xnt)} XNT/day`
                   : "-"}
               </div>
               <div>
-                Your staking share: {stakingSharePct != null ? `${stakingSharePct.toFixed(2)}%` : "-"}
+                Next epoch resets in: {epochCountdown != null ? formatDurationSeconds(epochCountdown) : "-"}
+              </div>
+              <div>
+                Your stake: {mintDecimals ? `${userStakeRounded} MIND` : "-"}
+              </div>
+              <div>
+                Your share: {stakingSharePct != null ? `${stakingSharePct.toFixed(2)}%` : "-"}
               </div>
             </div>
           </Card>
