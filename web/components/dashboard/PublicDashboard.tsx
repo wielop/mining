@@ -41,6 +41,7 @@ import { formatDurationSeconds, formatTokenAmount, parseUiAmountToBase, shortPk 
 import { formatError } from "@/lib/formatError";
 
 const ACC_SCALE = 1_000_000_000_000_000_000n;
+const AUTO_CLAIM_INTERVAL_MS = 300_000;
 const BPS_DENOMINATOR = 10_000n;
 const BADGE_BONUS_CAP_BPS = 2_000n;
 const CONTRACTS = [
@@ -99,6 +100,8 @@ export function PublicDashboard() {
   const [lastSig, setLastSig] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [autoClaimEnabled, setAutoClaimEnabled] = useState(false);
+  const [autoClaimEngaged, setAutoClaimEngaged] = useState(false);
   const hashpowerTooltip =
     "Hashpower gives you a share of daily emission. Your share changes if the network hashpower changes.";
   const [showShareFull, setShowShareFull] = useState(false);
@@ -401,21 +404,24 @@ export function PublicDashboard() {
     };
   };
 
-  const withTx = async (label: string, fn: () => Promise<string>) => {
-    setBusy(label);
-    setError(null);
-    try {
-      const sig = await fn();
-      setLastSig(sig);
-      pushToast({ title: label, description: shortPk(sig, 6) });
-    } catch (e: unknown) {
-      console.error(e);
-      setError(formatError(e));
-    } finally {
-      setBusy(null);
-      await refresh();
-    }
-  };
+  const withTx = useCallback(
+    async (label: string, fn: () => Promise<string>) => {
+      setBusy(label);
+      setError(null);
+      try {
+        const sig = await fn();
+        setLastSig(sig);
+        pushToast({ title: label, description: shortPk(sig, 6) });
+      } catch (e: unknown) {
+        console.error(e);
+        setError(formatError(e));
+      } finally {
+        setBusy(null);
+        await refresh();
+      }
+    },
+    [pushToast, refresh]
+  );
 
   const onBuy = async () => {
     if (!anchorWallet || !publicKey || !config) return;
@@ -447,7 +453,7 @@ export function PublicDashboard() {
     });
   };
 
-  const onClaimAll = async () => {
+  const onClaimAll = useCallback(async () => {
     if (busy != null) return;
     if (!anchorWallet || !publicKey || !config) return;
     const claimTargets = pendingPositions.filter((entry) => entry.livePending > 0n);
@@ -475,7 +481,7 @@ export function PublicDashboard() {
       }
       return await program.provider.sendAndConfirm(tx, []);
     });
-  };
+  }, [anchorWallet, busy, connection, config, pendingPositions, publicKey, withTx]);
 
   const onDeactivate = async (posPubkey: string, ownerBytes: Uint8Array) => {
     if (!anchorWallet || !config) return;
@@ -492,6 +498,23 @@ export function PublicDashboard() {
       return sig;
     });
   };
+
+  const autoClaimOnce = useCallback(async () => {
+    if (!autoClaimEnabled || autoClaimEngaged || busy != null) return;
+    setAutoClaimEngaged(true);
+    try {
+      await onClaimAll();
+    } finally {
+      setAutoClaimEngaged(false);
+    }
+  }, [autoClaimEnabled, autoClaimEngaged, busy, onClaimAll]);
+
+  useEffect(() => {
+    if (!autoClaimEnabled) return;
+    void autoClaimOnce();
+    const id = window.setInterval(() => void autoClaimOnce(), AUTO_CLAIM_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, [autoClaimEnabled, autoClaimOnce]);
 
   const onStake = async () => {
     if (!anchorWallet || !publicKey || !config || !mintDecimals) return;
@@ -786,13 +809,17 @@ export function PublicDashboard() {
               <div className="mt-4 flex items-center gap-2">
                 <Button
                   size="sm"
-                  variant="secondary"
-                  onClick={() => void onClaimAll()}
-                  disabled={claimDisabled}
+                  variant={autoClaimEnabled ? "secondary" : "ghost"}
+                  onClick={() => setAutoClaimEnabled((prev) => !prev)}
+                  disabled={claimDisabled || autoClaimEngaged}
                   className="text-[11px]"
                   title="Collect all unclaimed MIND from your active rigs."
                 >
-                  {busy === "Claim all rigs" ? "Claiming..." : "Start claim ON"}
+                  {autoClaimEngaged
+                    ? "Claiming..."
+                    : autoClaimEnabled
+                    ? "Auto claim ON"
+                    : "Start claim ON"}
                 </Button>
               </div>
             </div>
