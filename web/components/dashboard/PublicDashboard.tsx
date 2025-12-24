@@ -601,7 +601,7 @@ export function PublicDashboard() {
     !publicKey || !config || !mintDecimals || Boolean(busy) || stakeAmountUi.trim() === "";
   const unstakeDisabled =
     !publicKey || !config || !mintDecimals || Boolean(busy) || unstakeAmountUi.trim() === "";
-  const claimDisabled = !publicKey || !config || Boolean(busy) || totalPendingMind === 0n;
+  const claimDisabled = !publicKey || !config || Boolean(busy);
 
   return (
     <div className="min-h-screen bg-ink text-white">
