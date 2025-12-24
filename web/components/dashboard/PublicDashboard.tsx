@@ -41,7 +41,7 @@ import { formatDurationSeconds, formatTokenAmount, parseUiAmountToBase, shortPk 
 import { formatError } from "@/lib/formatError";
 
 const ACC_SCALE = 1_000_000_000_000_000_000n;
-const AUTO_CLAIM_INTERVAL_MS = 300_000;
+const AUTO_CLAIM_INTERVAL_MS = 15_000;
 const BPS_DENOMINATOR = 10_000n;
 const BADGE_BONUS_CAP_BPS = 2_000n;
 const CONTRACTS = [
