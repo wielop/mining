@@ -204,7 +204,6 @@ export async function GET() {
   const treasuryRatio =
     flow30d.xntFromMining > 0 ? treasuryNet / flow30d.xntFromMining : null;
 
-  const rewardRatePerDay = toUi(cfg.stakingRewardRateXntPerSec * 86_400n, XNT_DECIMALS);
   const runwayDays =
     rewardRatePerDay > 0 ? snapshot.staking.rewardPoolXnt / rewardRatePerDay : null;
 
