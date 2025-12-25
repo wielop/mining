@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { TopBar } from "@/components/shared/TopBar";
 import { useToast } from "@/components/shared/ToastProvider";
+import { AdminNav } from "@/components/admin/AdminNav";
 import { getProgram } from "@/lib/anchor";
 import {
   deriveConfigPda,
@@ -70,6 +71,7 @@ export function AdminDashboard() {
   const [busy, setBusy] = useState<string | null>(null);
   const [lastSig, setLastSig] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [criticalBlocked, setCriticalBlocked] = useState(false);
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -218,6 +220,30 @@ export function AdminDashboard() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    let active = true;
+    const loadAlerts = async () => {
+      try {
+        const res = await fetch("/api/admin/state", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = await res.json();
+        const hasCritical = (data.alerts ?? []).some(
+          (alert: { level: string; resolved: boolean }) =>
+            alert.level === "CRITICAL" && !alert.resolved
+        );
+        if (active) setCriticalBlocked(hasCritical);
+      } catch {
+        if (active) setCriticalBlocked(false);
+      }
+    };
+    void loadAlerts();
+    const interval = setInterval(loadAlerts, 30_000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   const isAdmin = useMemo(() => {
     if (!publicKey || !config) return false;
@@ -397,6 +423,7 @@ export function AdminDashboard() {
       <TopBar link={{ href: "/", label: "Dashboard" }} />
 
       <main className="mx-auto max-w-5xl px-4 pb-20 pt-10">
+        <AdminNav active="panel" isAdmin={isAdmin} />
         <div className="grid gap-4 sm:grid-cols-2">
           <Card className="p-4">
             <div className="text-sm font-semibold">Config</div>
@@ -500,9 +527,18 @@ export function AdminDashboard() {
             <div className="text-sm font-semibold">Roll staking epoch</div>
             <div className="mt-3 text-xs text-zinc-400">Epoch length (seconds)</div>
             <Input value={epochSecondsUi} onChange={setEpochSecondsUi} />
-            <Button className="mt-4" onClick={() => void onRollEpoch()} disabled={busy != null}>
+            <Button
+              className="mt-4"
+              onClick={() => void onRollEpoch()}
+              disabled={busy != null || criticalBlocked}
+            >
               {busy === "Roll epoch" ? "Submitting..." : "Roll Epoch"}
             </Button>
+            {criticalBlocked ? (
+              <div className="mt-2 text-xs text-amber-200">
+                Rolling is blocked while there are unresolved critical alerts. Check the "Dane" tab.
+              </div>
+            ) : null}
           </Card>
 
           <Card className="p-4">

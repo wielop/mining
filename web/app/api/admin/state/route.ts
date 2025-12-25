@@ -1,0 +1,158 @@
+import { NextResponse } from "next/server";
+import { Connection, PublicKey } from "@solana/web3.js";
+import { getMint } from "@solana/spl-token";
+import { decodeMinerPositionAccount, MINER_POSITION_LEN } from "@/lib/decoders";
+import { fetchConfig, fetchClockUnixTs, getProgramId, getRpcUrl } from "@/lib/solana";
+import type { AlertEntry, FlowStats, ProtocolSnapshot } from "@/lib/adminData";
+import { isAlertResolved } from "@/lib/adminAlertsStore";
+
+const XNT_DECIMALS = 9;
+const NATIVE_VAULT_SPACE = 9;
+const BUFFER_DAYS = 3;
+
+const toUi = (amount: bigint, decimals: number) =>
+  Number(amount) / Math.pow(10, decimals);
+
+const approxEqual = (a: number, b: number, tolerance = 0.01) => Math.abs(a - b) <= tolerance;
+
+// Data Center API: aggregates on-chain state + simple alert rules.
+export async function GET() {
+  const connection = new Connection(getRpcUrl(), "confirmed");
+  const cfg = await fetchConfig(connection);
+  if (!cfg) {
+    return NextResponse.json({ error: "Config not found" }, { status: 404 });
+  }
+  const nowTs = await fetchClockUnixTs(connection);
+
+  const mindMintInfo = await getMint(connection, cfg.mindMint, "confirmed");
+  const dailyEmissionBase = cfg.emissionPerSec * cfg.secondsPerDay;
+  const totalMindMined = toUi(mindMintInfo.supply, mindMintInfo.decimals);
+
+  const rentLamports = BigInt(
+    await connection.getMinimumBalanceForRentExemption(NATIVE_VAULT_SPACE)
+  );
+  const rewardVaultLamports = BigInt(
+    await connection.getBalance(cfg.stakingRewardVault, "confirmed")
+  );
+  const treasuryLamports = BigInt(await connection.getBalance(cfg.treasuryVault, "confirmed"));
+  const rewardPoolAvailable =
+    rewardVaultLamports > rentLamports ? rewardVaultLamports - rentLamports : 0n;
+  const treasuryAvailable =
+    treasuryLamports > rentLamports ? treasuryLamports - rentLamports : 0n;
+
+  const snapshot: ProtocolSnapshot = {
+    timestamp: new Date().toISOString(),
+    mining: {
+      networkHp: Number(cfg.networkHpActive),
+      maxHp: Number(cfg.maxEffectiveHp),
+      dailyEmissionMind: toUi(dailyEmissionBase, mindMintInfo.decimals),
+      totalMindMined,
+    },
+    staking: {
+      totalStakedMind: toUi(cfg.stakingTotalStakedMind, mindMintInfo.decimals),
+      rewardPoolXnt: toUi(rewardPoolAvailable, XNT_DECIMALS),
+      epochEndsAt: cfg.stakingEpochEndTs > 0 ? new Date(cfg.stakingEpochEndTs * 1000).toISOString() : null,
+    },
+    treasury: {
+      totalXntIn: toUi(rewardPoolAvailable + treasuryAvailable, XNT_DECIMALS),
+      available: toUi(treasuryAvailable, XNT_DECIMALS),
+      inStakingBucket: 0,
+      inLp: 0,
+      inInvestments: 0,
+      inReserve: 0,
+    },
+  };
+
+  const flows: FlowStats[] = [
+    {
+      window: "24h",
+      xntFromMining: 0,
+      xntToStakingRewards: 0,
+      xntToTreasury: 0,
+      xntUsedForBuyback: 0,
+      xntAddedToLp: 0,
+    },
+    {
+      window: "7d",
+      xntFromMining: 0,
+      xntToStakingRewards: 0,
+      xntToTreasury: 0,
+      xntUsedForBuyback: 0,
+      xntAddedToLp: 0,
+    },
+    {
+      window: "30d",
+      xntFromMining: 0,
+      xntToStakingRewards: 0,
+      xntToTreasury: 0,
+      xntUsedForBuyback: 0,
+      xntAddedToLp: 0,
+    },
+  ];
+  // TODO: Replace zeroed FlowStats with real aggregation from event logs / DB.
+
+  const alerts: AlertEntry[] = [];
+
+  const flow24h = flows.find((item) => item.window === "24h")!;
+  const expectedFlow = flow24h.xntToStakingRewards + flow24h.xntToTreasury;
+  if (flow24h.xntFromMining > 0 && !approxEqual(flow24h.xntFromMining, expectedFlow, 0.01)) {
+    const id = "flow_mismatch";
+    alerts.push({
+      id,
+      level: "CRITICAL",
+      createdAt: new Date().toISOString(),
+      message: "XNT mining inflow does not match staking + treasury outflow (24h).",
+      details: `In: ${flow24h.xntFromMining}, Out: ${expectedFlow}`,
+      resolved: isAlertResolved(id),
+    });
+  }
+
+  const rewardRatePerDay = toUi(cfg.stakingRewardRateXntPerSec * 86_400n, XNT_DECIMALS);
+  if (rewardRatePerDay > 0 && snapshot.staking.rewardPoolXnt < rewardRatePerDay * BUFFER_DAYS) {
+    const id = "reward_buffer_low";
+    alerts.push({
+      id,
+      level: "WARN",
+      createdAt: new Date().toISOString(),
+      message: "Reward pool buffer is below the target window.",
+      details: `Buffer < ${BUFFER_DAYS} days at current pace.`,
+      resolved: isAlertResolved(id),
+    });
+  }
+
+  const programId = getProgramId();
+  const positions = await connection.getProgramAccounts(programId, {
+    commitment: "confirmed",
+    filters: [{ dataSize: MINER_POSITION_LEN }],
+  });
+  const hpByOwner = new Map<string, bigint>();
+  for (const entry of positions) {
+    const decoded = decodeMinerPositionAccount(Buffer.from(entry.account.data));
+    if (decoded.deactivated || decoded.endTs <= nowTs) continue;
+    const ownerKey = new PublicKey(decoded.owner).toBase58();
+    hpByOwner.set(ownerKey, (hpByOwner.get(ownerKey) ?? 0n) + decoded.hp);
+  }
+  const totalHp = cfg.networkHpActive;
+  let topOwner: { owner: string; share: number } | null = null;
+  if (totalHp > 0n) {
+    for (const [owner, hp] of hpByOwner.entries()) {
+      const share = Number((hp * 10_000n) / totalHp) / 100;
+      if (!topOwner || share > topOwner.share) {
+        topOwner = { owner, share };
+      }
+    }
+  }
+  if (topOwner && topOwner.share > 40) {
+    const id = `whale_hp_${topOwner.owner}`;
+    alerts.push({
+      id,
+      level: topOwner.share > 60 ? "CRITICAL" : "WARN",
+      createdAt: new Date().toISOString(),
+      message: "Single address controls a large share of network HP.",
+      details: `${topOwner.owner} has ${topOwner.share.toFixed(2)}% of active HP.`,
+      resolved: isAlertResolved(id),
+    });
+  }
+
+  return NextResponse.json({ snapshot, flows, alerts });
+}
