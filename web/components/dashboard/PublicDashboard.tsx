@@ -46,6 +46,7 @@ const AUTO_CLAIM_INTERVAL_MS = 15_000;
 const BPS_DENOMINATOR = 10_000n;
 const BADGE_BONUS_CAP_BPS = 2_000n;
 const XNT_DECIMALS = 9;
+const NATIVE_VAULT_SPACE = 9;
 const CONTRACTS = [
   { key: 0, label: "Starter Rig", durationDays: 7, costXnt: 1, hp: 1 },
   { key: 1, label: "Pro Rig", durationDays: 14, costXnt: 10, hp: 5 },
@@ -167,6 +168,12 @@ export function PublicDashboard() {
       } catch {
         useNativeXnt = true;
         rewardBal = BigInt(await connection.getBalance(cfg.stakingRewardVault, "confirmed"));
+      }
+      if (useNativeXnt) {
+        const rentLamports = BigInt(
+          await connection.getMinimumBalanceForRentExemption(NATIVE_VAULT_SPACE)
+        );
+        rewardBal = rewardBal > rentLamports ? rewardBal - rentLamports : 0n;
       }
       const mindBal = await connection.getTokenAccountBalance(cfg.stakingMindVault, "confirmed");
       if (isStale()) return;

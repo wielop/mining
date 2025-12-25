@@ -32,6 +32,7 @@ import {
 
 const DAY_SECONDS = 86_400n;
 const XNT_DECIMALS = 9;
+const NATIVE_VAULT_SPACE = 9;
 
 export function AdminDashboard() {
   const { connection } = useConnection();
@@ -106,6 +107,13 @@ export function AdminDashboard() {
         useNativeXnt = true;
         rewardBal = BigInt(await connection.getBalance(cfg.stakingRewardVault, "confirmed"));
       }
+      let rentLamports = 0n;
+      if (useNativeXnt) {
+        rentLamports = BigInt(
+          await connection.getMinimumBalanceForRentExemption(NATIVE_VAULT_SPACE)
+        );
+        rewardBal = rewardBal > rentLamports ? rewardBal - rentLamports : 0n;
+      }
       let treasuryBal: bigint;
       try {
         if (useNativeXnt) {
@@ -119,6 +127,9 @@ export function AdminDashboard() {
         }
       } catch {
         treasuryBal = BigInt(await connection.getBalance(cfg.treasuryVault, "confirmed"));
+      }
+      if (useNativeXnt) {
+        treasuryBal = treasuryBal > rentLamports ? treasuryBal - rentLamports : 0n;
       }
       setStakingRewardBalance(rewardBal);
       setTreasuryBalance(treasuryBal);
@@ -410,10 +421,12 @@ export function AdminDashboard() {
           <Card className="p-4">
             <div className="text-sm font-semibold">Vaults</div>
             <div className="mt-3 text-xs text-zinc-400">
-              Reward vault: {mintDecimals ? formatTokenAmount(stakingRewardBalance, mintDecimals.xnt, 4) : "-"} XNT
+              Reward vault (available):{" "}
+              {mintDecimals ? formatTokenAmount(stakingRewardBalance, mintDecimals.xnt, 4) : "-"} XNT
             </div>
             <div className="mt-2 text-xs text-zinc-400">
-              Treasury vault: {mintDecimals ? formatTokenAmount(treasuryBalance, mintDecimals.xnt, 4) : "-"} XNT
+              Treasury vault (available):{" "}
+              {mintDecimals ? formatTokenAmount(treasuryBalance, mintDecimals.xnt, 4) : "-"} XNT
             </div>
           </Card>
         </div>
