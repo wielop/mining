@@ -28,7 +28,11 @@ export function TopBar({
     <header className={cn("sticky top-0 z-40 border-b border-cyan-400/10 bg-ink/80 backdrop-blur-xl", className)}>
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-4">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 shadow-[0_0_18px_rgba(34,242,255,0.2)]" />
+          <img
+            src="/logo.svg"
+            alt="Mind Factory logo"
+            className="h-8 w-8 drop-shadow-[0_0_12px_rgba(124,255,164,0.55)]"
+          />
           <div>
             <div className="text-sm font-semibold uppercase tracking-[0.22em] text-zinc-100">{title}</div>
             {subtitle ? <div className="text-[11px] text-zinc-400">{subtitle}</div> : null}
