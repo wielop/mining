@@ -383,13 +383,12 @@ export function PublicDashboard() {
       : "-";
 
   const milestoneTargetXnt = 10n;
+  const xntDecimals = mintDecimals?.xnt ?? null;
   const milestoneTargetBase =
-    mintDecimals != null
-      ? milestoneTargetXnt * 10n ** BigInt(mintDecimals.xnt)
-      : null;
+    xntDecimals != null ? milestoneTargetXnt * 10n ** BigInt(xntDecimals) : null;
   const milestoneValue =
-    milestoneTargetBase != null
-      ? `${formatRoundedToken(milestoneTargetBase, mintDecimals.xnt, 2)} XNT`
+    milestoneTargetBase != null && xntDecimals != null
+      ? `${formatRoundedToken(milestoneTargetBase, xntDecimals, 2)} XNT`
       : "-";
   const milestoneRemainingBase =
     milestoneTargetBase != null && earnedSoFarBase < milestoneTargetBase
