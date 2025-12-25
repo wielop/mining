@@ -1,7 +1,7 @@
 "use client";
 
 import "@/lib/polyfillBufferClient";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAnchorWallet, useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { BN } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
@@ -107,6 +107,7 @@ export function PublicDashboard() {
     pubkey: string;
     owner: Uint8Array;
   } | null>(null);
+  const refreshIdRef = useRef(0);
   const hashpowerTooltip =
     "Hashpower gives you a share of daily emission. Your share changes if the network hashpower changes.";
   const [showShareFull, setShowShareFull] = useState(false);
@@ -116,12 +117,16 @@ export function PublicDashboard() {
   const contract = CONTRACTS.find((c) => c.key === selectedContract) ?? CONTRACTS[0];
 
   const refresh = useCallback(async () => {
+    const refreshId = ++refreshIdRef.current;
+    const isStale = () => refreshId !== refreshIdRef.current;
     setError(null);
     setLoading(true);
     try {
       const cfg = await fetchConfig(connection);
+      if (isStale()) return;
       setConfig(cfg);
       const ts = await fetchClockUnixTs(connection);
+      if (isStale()) return;
       setNowTs(ts);
       setLastRefreshNowTs(ts);
 
@@ -129,12 +134,14 @@ export function PublicDashboard() {
         getMint(connection, cfg.xntMint, "confirmed"),
         getMint(connection, cfg.mindMint, "confirmed"),
       ]);
+      if (isStale()) return;
       setMintDecimals({ xnt: xntMintInfo.decimals, mind: mindMintInfo.decimals });
 
       const [rewardBal, mindBal] = await Promise.all([
         connection.getTokenAccountBalance(cfg.stakingRewardVault, "confirmed"),
         connection.getTokenAccountBalance(cfg.stakingMindVault, "confirmed"),
       ]);
+      if (isStale()) return;
       setStakingRewardBalance(BigInt(rewardBal.value.amount || "0"));
       setStakingMindBalance(BigInt(mindBal.value.amount || "0"));
 
@@ -159,6 +166,7 @@ export function PublicDashboard() {
         connection.getAccountInfo(deriveUserProfilePda(publicKey), "confirmed"),
         connection.getAccountInfo(deriveUserStakePda(publicKey), "confirmed"),
       ]);
+      if (isStale()) return;
 
       const decodedPositions = posGpa
         .map((p) => ({
@@ -187,6 +195,7 @@ export function PublicDashboard() {
           .then((b) => BigInt(b.value.amount || "0"))
           .catch(() => 0n),
       ]);
+      if (isStale()) return;
       setXntBalance(xntBal);
       setMindBalance(mindBalUser);
 
@@ -217,7 +226,9 @@ export function PublicDashboard() {
       console.error(e);
       setError(formatError(e));
     } finally {
-      setLoading(false);
+      if (!isStale()) {
+        setLoading(false);
+      }
     }
   }, [connection, publicKey]);
 
