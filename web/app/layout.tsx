@@ -18,7 +18,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Mind Factory — Mining & Staking",
+  title: "MIND FACTORY — Mining & Staking",
   description: "Mind Factory: pro-rata mining and staking with sustainable rewards.",
   icons: {
     icon: "/favicon.ico",
