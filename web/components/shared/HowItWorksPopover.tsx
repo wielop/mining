@@ -61,10 +61,10 @@ export function HowItWorksPopover() {
             </div>
             <div className="mt-3 space-y-3 text-xs text-zinc-300">
               <div>
-                <div className="font-semibold text-zinc-200">1) Connect wallet & get WXNT</div>
+                <div className="font-semibold text-zinc-200">1) Connect wallet & get XNT</div>
                 <ul className="mt-1 list-disc space-y-1 pl-4 text-zinc-300">
                   <li>Connect your X1 wallet.</li>
-                  <li>Make sure you have some WXNT to pay for mining contracts and a bit of XNT for gas.</li>
+                  <li>Make sure you have some XNT to pay for mining contracts and a bit of XNT for gas.</li>
                 </ul>
               </div>
               <div>
@@ -113,7 +113,7 @@ export function HowItWorksPopover() {
               <div>
                 <div className="font-semibold text-zinc-200">Quick recap</div>
                 <ul className="mt-1 list-disc space-y-1 pl-4 text-zinc-300">
-                  <li>Mining = WXNT → time-limited hashpower → you earn MIND.</li>
+                  <li>Mining = XNT → time-limited hashpower → you earn MIND.</li>
                   <li>Staking = MIND → staking pool → you earn XNT.</li>
                   <li>No fixed APR, no magic yield – everything comes from real payments into the system.</li>
                 </ul>

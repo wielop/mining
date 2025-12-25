@@ -45,6 +45,7 @@ const ACC_SCALE = 1_000_000_000_000_000_000n;
 const AUTO_CLAIM_INTERVAL_MS = 15_000;
 const BPS_DENOMINATOR = 10_000n;
 const BADGE_BONUS_CAP_BPS = 2_000n;
+const XNT_DECIMALS = 9;
 const CONTRACTS = [
   { key: 0, label: "Starter Rig", durationDays: 7, costXnt: 1, hp: 1 },
   { key: 1, label: "Pro Rig", durationDays: 14, costXnt: 10, hp: 5 },
@@ -131,19 +132,24 @@ export function PublicDashboard() {
       setNowTs(ts);
       setLastRefreshNowTs(ts);
 
-      const [xntMintInfo, mindMintInfo] = await Promise.all([
-        getMint(connection, cfg.xntMint, "confirmed"),
-        getMint(connection, cfg.mindMint, "confirmed"),
-      ]);
+      const isNativeXnt = cfg.xntMint.equals(SystemProgram.programId);
+      const mindMintInfo = await getMint(connection, cfg.mindMint, "confirmed");
+      const xntDecimals = isNativeXnt
+        ? XNT_DECIMALS
+        : (await getMint(connection, cfg.xntMint, "confirmed")).decimals;
       if (isStale()) return;
-      setMintDecimals({ xnt: xntMintInfo.decimals, mind: mindMintInfo.decimals });
+      setMintDecimals({ xnt: xntDecimals, mind: mindMintInfo.decimals });
 
-      const [rewardBal, mindBal] = await Promise.all([
-        connection.getTokenAccountBalance(cfg.stakingRewardVault, "confirmed"),
+      const [rewardBalRaw, mindBal] = await Promise.all([
+        isNativeXnt
+          ? connection.getBalance(cfg.stakingRewardVault, "confirmed")
+          : connection.getTokenAccountBalance(cfg.stakingRewardVault, "confirmed"),
         connection.getTokenAccountBalance(cfg.stakingMindVault, "confirmed"),
       ]);
       if (isStale()) return;
-      setStakingRewardBalance(BigInt(rewardBal.value.amount || "0"));
+      const rewardBal =
+        typeof rewardBalRaw === "number" ? BigInt(rewardBalRaw) : BigInt(rewardBalRaw.value.amount || "0");
+      setStakingRewardBalance(rewardBal);
       setStakingMindBalance(BigInt(mindBal.value.amount || "0"));
 
       if (!publicKey) {
@@ -184,13 +190,14 @@ export function PublicDashboard() {
         stakeAcc?.data ? tryDecodeUserStakeAccount(Buffer.from(stakeAcc.data)) : null
       );
 
-      const xntAta = getAssociatedTokenAddressSync(cfg.xntMint, publicKey);
       const mindAta = getAssociatedTokenAddressSync(cfg.mindMint, publicKey);
       const [xntBal, mindBalUser] = await Promise.all([
-        connection
-          .getTokenAccountBalance(xntAta, "confirmed")
-          .then((b) => BigInt(b.value.amount || "0"))
-          .catch(() => 0n),
+        isNativeXnt
+          ? connection.getBalance(publicKey, "confirmed").then((b) => BigInt(b))
+          : connection
+              .getTokenAccountBalance(getAssociatedTokenAddressSync(cfg.xntMint, publicKey), "confirmed")
+              .then((b) => BigInt(b.value.amount || "0"))
+              .catch(() => 0n),
         connection
           .getTokenAccountBalance(mindAta, "confirmed")
           .then((b) => BigInt(b.value.amount || "0"))
@@ -581,9 +588,6 @@ export function PublicDashboard() {
     const nextIndex = userProfile?.nextPositionIndex ?? BigInt(positions.length);
     const positionIndex = new BN(nextIndex.toString());
     await withTx("Buy contract", async () => {
-      const { ata, ix } = await ensureAta(publicKey, config.xntMint);
-      const tx = new Transaction();
-      if (ix) tx.add(ix);
       const sig = await program.methods
         .buyContract(contract.key, positionIndex)
         .accounts({
@@ -591,15 +595,10 @@ export function PublicDashboard() {
           config: deriveConfigPda(),
           userProfile: deriveUserProfilePda(publicKey),
           position: derivePositionPda(publicKey, nextIndex),
-          vaultAuthority: deriveVaultPda(),
-          xntMint: config.xntMint,
           stakingRewardVault: config.stakingRewardVault,
           treasuryVault: config.treasuryVault,
-          ownerXntAta: ata,
-          tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
-        .preInstructions(tx.instructions)
         .rpc();
       return sig;
     });
@@ -767,9 +766,6 @@ export function PublicDashboard() {
     if (!anchorWallet || !publicKey || !config) return;
     const program = getProgram(connection, anchorWallet);
     await withTx("Claim XNT", async () => {
-      const { ata, ix } = await ensureAta(publicKey, config.xntMint);
-      const tx = new Transaction();
-      if (ix) tx.add(ix);
       const sig = await program.methods
         .claimXnt()
         .accounts({
@@ -777,13 +773,9 @@ export function PublicDashboard() {
           config: deriveConfigPda(),
           userProfile: deriveUserProfilePda(publicKey),
           userStake: deriveUserStakePda(publicKey),
-          vaultAuthority: deriveVaultPda(),
           stakingRewardVault: config.stakingRewardVault,
-          ownerXntAta: ata,
-          tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
-        .preInstructions(tx.instructions)
         .rpc();
       return sig;
     });

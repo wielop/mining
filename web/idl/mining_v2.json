@@ -31,18 +31,13 @@
           "isSigner": false
         },
         {
-          "name": "xntMint",
-          "isMut": false,
-          "isSigner": false
-        },
-        {
           "name": "stakingRewardVault",
-          "isMut": false,
+          "isMut": true,
           "isSigner": false
         },
         {
           "name": "treasuryVault",
-          "isMut": false,
+          "isMut": true,
           "isSigner": false
         },
         {
@@ -99,16 +94,6 @@
           "isSigner": false
         },
         {
-          "name": "vaultAuthority",
-          "isMut": false,
-          "isSigner": false
-        },
-        {
-          "name": "xntMint",
-          "isMut": true,
-          "isSigner": false
-        },
-        {
           "name": "stakingRewardVault",
           "isMut": true,
           "isSigner": false
@@ -116,16 +101,6 @@
         {
           "name": "treasuryVault",
           "isMut": true,
-          "isSigner": false
-        },
-        {
-          "name": "ownerXntAta",
-          "isMut": true,
-          "isSigner": false
-        },
-        {
-          "name": "tokenProgram",
-          "isMut": false,
           "isSigner": false
         },
         {
@@ -343,23 +318,8 @@
           "isSigner": false
         },
         {
-          "name": "vaultAuthority",
-          "isMut": false,
-          "isSigner": false
-        },
-        {
           "name": "stakingRewardVault",
           "isMut": true,
-          "isSigner": false
-        },
-        {
-          "name": "ownerXntAta",
-          "isMut": true,
-          "isSigner": false
-        },
-        {
-          "name": "tokenProgram",
-          "isMut": false,
           "isSigner": false
         },
         {
@@ -417,7 +377,7 @@
       ]
     },
     {
-      "name": "adminUpdateXntMint",
+      "name": "adminUseNativeXnt",
       "accounts": [
         {
           "name": "admin",
@@ -430,16 +390,6 @@
           "isSigner": false
         },
         {
-          "name": "vaultAuthority",
-          "isMut": false,
-          "isSigner": false
-        },
-        {
-          "name": "xntMint",
-          "isMut": false,
-          "isSigner": false
-        },
-        {
           "name": "stakingRewardVault",
           "isMut": true,
           "isSigner": false
@@ -447,6 +397,11 @@
         {
           "name": "treasuryVault",
           "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
           "isSigner": false
         }
       ],
@@ -466,22 +421,12 @@
           "isSigner": false
         },
         {
-          "name": "vaultAuthority",
-          "isMut": false,
-          "isSigner": false
-        },
-        {
           "name": "treasuryVault",
           "isMut": true,
           "isSigner": false
         },
         {
-          "name": "adminXntAta",
-          "isMut": true,
-          "isSigner": false
-        },
-        {
-          "name": "tokenProgram",
+          "name": "systemProgram",
           "isMut": false,
           "isSigner": false
         }
@@ -535,6 +480,18 @@
     }
   ],
   "accounts": [
+    {
+      "name": "NativeVault",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
     {
       "name": "Config",
       "type": {

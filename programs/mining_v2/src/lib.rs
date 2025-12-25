@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use anchor_lang::system_program::{self, Transfer as SystemTransfer};
 use anchor_spl::token::{self, Burn, Mint, MintTo, Token, TokenAccount, Transfer};
 use solana_program::program_option::COption;
 
@@ -6,6 +7,8 @@ declare_id!("uaDkkJGLLEY3kFMhhvrh5MZJ6fmwCmhNf8L7BZQJ9Aw");
 
 const CONFIG_SEED: &[u8] = b"config";
 const VAULT_SEED: &[u8] = b"vault";
+const STAKING_REWARD_VAULT_SEED: &[u8] = b"staking_reward_vault";
+const TREASURY_VAULT_SEED: &[u8] = b"treasury_vault";
 const POSITION_SEED: &[u8] = b"position";
 const PROFILE_SEED: &[u8] = b"profile";
 const STAKE_SEED: &[u8] = b"stake";
@@ -16,6 +19,7 @@ const SECONDS_PER_DAY_DEFAULT: u64 = 86_400;
 const STAKING_SHARE_BPS: u128 = 3_000; // 30%
 const BADGE_BONUS_CAP_BPS: u16 = 2_000; // 20%
 const UNSTAKE_BURN_BPS: u128 = 300; // 3%
+const XNT_BASE: u64 = 1_000_000_000;
 
 #[program]
 pub mod mining_v2 {
@@ -50,7 +54,7 @@ pub mod mining_v2 {
         config.last_update_ts = now;
         config.network_hp_active = 0;
         config.mind_mint = ctx.accounts.mind_mint.key();
-        config.xnt_mint = ctx.accounts.xnt_mint.key();
+        config.xnt_mint = System::id();
         config.staking_reward_vault = ctx.accounts.staking_reward_vault.key();
         config.treasury_vault = ctx.accounts.treasury_vault.key();
         config.staking_mind_vault = ctx.accounts.staking_mind_vault.key();
@@ -65,6 +69,9 @@ pub mod mining_v2 {
         config.staking_undistributed_xnt = 0;
         config.staking_accounted_balance = 0;
         config.bumps = bumps;
+
+        ctx.accounts.staking_reward_vault.bump = *ctx.bumps.get("staking_reward_vault").unwrap();
+        ctx.accounts.treasury_vault.bump = *ctx.bumps.get("treasury_vault").unwrap();
 
         emit!(ConfigInitialized {
             admin: config.admin,
@@ -102,8 +109,7 @@ pub mod mining_v2 {
             ErrorCode::InvalidPositionIndex
         );
 
-        let (duration_days, hp, cost_base) =
-            contract_terms(contract_type, ctx.accounts.xnt_mint.decimals)?;
+        let (duration_days, hp, cost_base) = contract_terms(contract_type)?;
         let seconds_per_day = cfg.seconds_per_day;
         let duration_seconds = (duration_days as i64)
             .checked_mul(seconds_per_day as i64)
@@ -148,25 +154,23 @@ pub mod mining_v2 {
             .checked_sub(staking_share)
             .ok_or(ErrorCode::MathOverflow)?;
 
-        token::transfer(
+        system_program::transfer(
             CpiContext::new(
-                ctx.accounts.token_program.to_account_info(),
-                Transfer {
-                    from: ctx.accounts.owner_xnt_ata.to_account_info(),
+                ctx.accounts.system_program.to_account_info(),
+                SystemTransfer {
+                    from: ctx.accounts.owner.to_account_info(),
                     to: ctx.accounts.treasury_vault.to_account_info(),
-                    authority: ctx.accounts.owner.to_account_info(),
                 },
             ),
             treasury_share,
         )?;
         if staking_share > 0 {
-            token::transfer(
+            system_program::transfer(
                 CpiContext::new(
-                    ctx.accounts.token_program.to_account_info(),
-                    Transfer {
-                        from: ctx.accounts.owner_xnt_ata.to_account_info(),
+                    ctx.accounts.system_program.to_account_info(),
+                    SystemTransfer {
+                        from: ctx.accounts.owner.to_account_info(),
                         to: ctx.accounts.staking_reward_vault.to_account_info(),
-                        authority: ctx.accounts.owner.to_account_info(),
                     },
                 ),
                 staking_share,
@@ -429,19 +433,19 @@ pub mod mining_v2 {
             .ok_or(ErrorCode::MathOverflow)?;
         let payout_u64 = u64::try_from(payout).map_err(|_| ErrorCode::MathOverflow)?;
 
-        require!(
-            ctx.accounts.staking_reward_vault.amount >= payout_u64,
-            ErrorCode::InsufficientVaultBalance
-        );
+        let available = vault_available_lamports(&ctx.accounts.staking_reward_vault)?;
+        require!(available >= payout_u64, ErrorCode::InsufficientVaultBalance);
 
-        let signer_seeds: &[&[u8]] = &[VAULT_SEED, &[cfg.bumps.vault_authority]];
-        token::transfer(
+        let signer_seeds: &[&[u8]] = &[
+            STAKING_REWARD_VAULT_SEED,
+            &[ctx.bumps.get("staking_reward_vault").copied().unwrap()],
+        ];
+        system_program::transfer(
             CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
-                Transfer {
+                ctx.accounts.system_program.to_account_info(),
+                SystemTransfer {
                     from: ctx.accounts.staking_reward_vault.to_account_info(),
-                    to: ctx.accounts.owner_xnt_ata.to_account_info(),
-                    authority: ctx.accounts.vault_authority.to_account_info(),
+                    to: ctx.accounts.owner.to_account_info(),
                 },
                 &[signer_seeds],
             ),
@@ -473,7 +477,7 @@ pub mod mining_v2 {
         let cfg = &mut ctx.accounts.config;
         update_staking_global(cfg, now)?;
 
-        let vault_balance = ctx.accounts.staking_reward_vault.amount;
+        let vault_balance = vault_available_lamports(&ctx.accounts.staking_reward_vault)?;
         if vault_balance > cfg.staking_accounted_balance {
             let delta = vault_balance
                 .checked_sub(cfg.staking_accounted_balance)
@@ -536,17 +540,21 @@ pub mod mining_v2 {
         Ok(())
     }
 
-    pub fn admin_update_xnt_mint(ctx: Context<AdminUpdateXntMint>) -> Result<()> {
+    pub fn admin_use_native_xnt(ctx: Context<AdminUseNativeXnt>) -> Result<()> {
         let now = Clock::get()?.unix_timestamp;
         let cfg = &mut ctx.accounts.config;
         require_keys_eq!(cfg.admin, ctx.accounts.admin.key(), ErrorCode::Unauthorized);
 
-        cfg.xnt_mint = ctx.accounts.xnt_mint.key();
+        cfg.xnt_mint = System::id();
         cfg.staking_reward_vault = ctx.accounts.staking_reward_vault.key();
         cfg.treasury_vault = ctx.accounts.treasury_vault.key();
 
-        // Reset staking epoch accounting to align with the new reward vault.
-        cfg.staking_accounted_balance = ctx.accounts.staking_reward_vault.amount;
+        ctx.accounts.staking_reward_vault.bump =
+            *ctx.bumps.get("staking_reward_vault").unwrap();
+        ctx.accounts.treasury_vault.bump = *ctx.bumps.get("treasury_vault").unwrap();
+
+        // Reset staking epoch accounting to align with the native reward vault.
+        cfg.staking_accounted_balance = vault_available_lamports(&ctx.accounts.staking_reward_vault)?;
         cfg.staking_undistributed_xnt = 0;
         cfg.staking_reward_rate_xnt_per_sec = 0;
         cfg.staking_epoch_end_ts = now;
@@ -561,19 +569,19 @@ pub mod mining_v2 {
         require!(amount > 0, ErrorCode::InvalidAmount);
         let cfg = &ctx.accounts.config;
         require_keys_eq!(cfg.admin, ctx.accounts.admin.key(), ErrorCode::Unauthorized);
-        require!(
-            ctx.accounts.treasury_vault.amount >= amount,
-            ErrorCode::InsufficientVaultBalance
-        );
+        let available = vault_available_lamports(&ctx.accounts.treasury_vault)?;
+        require!(available >= amount, ErrorCode::InsufficientVaultBalance);
 
-        let signer_seeds: &[&[u8]] = &[VAULT_SEED, &[cfg.bumps.vault_authority]];
-        token::transfer(
+        let signer_seeds: &[&[u8]] = &[
+            TREASURY_VAULT_SEED,
+            &[ctx.bumps.get("treasury_vault").copied().unwrap()],
+        ];
+        system_program::transfer(
             CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
-                Transfer {
+                ctx.accounts.system_program.to_account_info(),
+                SystemTransfer {
                     from: ctx.accounts.treasury_vault.to_account_info(),
-                    to: ctx.accounts.admin_xnt_ata.to_account_info(),
-                    authority: ctx.accounts.vault_authority.to_account_info(),
+                    to: ctx.accounts.admin.to_account_info(),
                 },
                 &[signer_seeds],
             ),
@@ -629,17 +637,22 @@ pub struct InitConfig<'info> {
         constraint = mind_mint.mint_authority == COption::Some(vault_authority.key())
     )]
     pub mind_mint: Account<'info, Mint>,
-    pub xnt_mint: Box<Account<'info, Mint>>,
     #[account(
-        constraint = staking_reward_vault.owner == vault_authority.key(),
-        constraint = staking_reward_vault.mint == xnt_mint.key()
+        init,
+        payer = payer,
+        space = 8 + NativeVault::INIT_SPACE,
+        seeds = [STAKING_REWARD_VAULT_SEED],
+        bump
     )]
-    pub staking_reward_vault: Box<Account<'info, TokenAccount>>,
+    pub staking_reward_vault: Account<'info, NativeVault>,
     #[account(
-        constraint = treasury_vault.owner == vault_authority.key(),
-        constraint = treasury_vault.mint == xnt_mint.key()
+        init,
+        payer = payer,
+        space = 8 + NativeVault::INIT_SPACE,
+        seeds = [TREASURY_VAULT_SEED],
+        bump
     )]
-    pub treasury_vault: Box<Account<'info, TokenAccount>>,
+    pub treasury_vault: Account<'info, NativeVault>,
     #[account(
         constraint = staking_mind_vault.owner == vault_authority.key(),
         constraint = staking_mind_vault.mint == mind_mint.key()
@@ -684,32 +697,20 @@ pub struct BuyContract<'info> {
         bump
     )]
     pub position: Box<Account<'info, MinerPosition>>,
-    #[account(seeds = [VAULT_SEED], bump = config.bumps.vault_authority)]
-    /// CHECK: PDA derived from VAULT_SEED/bump used as vault authority.
-    pub vault_authority: UncheckedAccount<'info>,
-    #[account(mut, constraint = xnt_mint.key() == config.xnt_mint)]
-    pub xnt_mint: Account<'info, Mint>,
     #[account(
         mut,
-        constraint = staking_reward_vault.key() == config.staking_reward_vault,
-        constraint = staking_reward_vault.owner == vault_authority.key(),
-        constraint = staking_reward_vault.mint == xnt_mint.key()
+        seeds = [STAKING_REWARD_VAULT_SEED],
+        bump,
+        constraint = staking_reward_vault.key() == config.staking_reward_vault
     )]
-    pub staking_reward_vault: Account<'info, TokenAccount>,
+    pub staking_reward_vault: Account<'info, NativeVault>,
     #[account(
         mut,
-        constraint = treasury_vault.key() == config.treasury_vault,
-        constraint = treasury_vault.owner == vault_authority.key(),
-        constraint = treasury_vault.mint == xnt_mint.key()
+        seeds = [TREASURY_VAULT_SEED],
+        bump,
+        constraint = treasury_vault.key() == config.treasury_vault
     )]
-    pub treasury_vault: Account<'info, TokenAccount>,
-    #[account(
-        mut,
-        constraint = owner_xnt_ata.owner == owner.key(),
-        constraint = owner_xnt_ata.mint == xnt_mint.key()
-    )]
-    pub owner_xnt_ata: Box<Account<'info, TokenAccount>>,
-    pub token_program: Program<'info, Token>,
+    pub treasury_vault: Account<'info, NativeVault>,
     pub system_program: Program<'info, System>,
 }
 
@@ -878,23 +879,13 @@ pub struct ClaimXnt<'info> {
         constraint = user_stake.owner == owner.key()
     )]
     pub user_stake: Box<Account<'info, UserStake>>,
-    #[account(seeds = [VAULT_SEED], bump = config.bumps.vault_authority)]
-    /// CHECK: PDA derived from VAULT_SEED/bump used as vault authority.
-    pub vault_authority: UncheckedAccount<'info>,
     #[account(
         mut,
-        constraint = staking_reward_vault.key() == config.staking_reward_vault,
-        constraint = staking_reward_vault.owner == vault_authority.key(),
-        constraint = staking_reward_vault.mint == config.xnt_mint
+        seeds = [STAKING_REWARD_VAULT_SEED],
+        bump,
+        constraint = staking_reward_vault.key() == config.staking_reward_vault
     )]
-    pub staking_reward_vault: Account<'info, TokenAccount>,
-    #[account(
-        mut,
-        constraint = owner_xnt_ata.owner == owner.key(),
-        constraint = owner_xnt_ata.mint == config.xnt_mint
-    )]
-    pub owner_xnt_ata: Account<'info, TokenAccount>,
-    pub token_program: Program<'info, Token>,
+    pub staking_reward_vault: Account<'info, NativeVault>,
     pub system_program: Program<'info, System>,
 }
 
@@ -908,9 +899,11 @@ pub struct RollEpoch<'info> {
     pub config: Box<Account<'info, Config>>,
     #[account(
         mut,
+        seeds = [STAKING_REWARD_VAULT_SEED],
+        bump,
         constraint = staking_reward_vault.key() == config.staking_reward_vault
     )]
-    pub staking_reward_vault: Account<'info, TokenAccount>,
+    pub staking_reward_vault: Account<'info, NativeVault>,
 }
 
 #[derive(Accounts)]
@@ -926,7 +919,7 @@ pub struct AdminUpdateConfig<'info> {
 }
 
 #[derive(Accounts)]
-pub struct AdminUpdateXntMint<'info> {
+pub struct AdminUseNativeXnt<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
     #[account(
@@ -935,22 +928,23 @@ pub struct AdminUpdateXntMint<'info> {
         bump = config.bumps.config
     )]
     pub config: Box<Account<'info, Config>>,
-    #[account(seeds = [VAULT_SEED], bump = config.bumps.vault_authority)]
-    /// CHECK: PDA derived from VAULT_SEED/bump used as vault authority.
-    pub vault_authority: UncheckedAccount<'info>,
-    pub xnt_mint: Account<'info, Mint>,
     #[account(
-        mut,
-        constraint = staking_reward_vault.owner == vault_authority.key(),
-        constraint = staking_reward_vault.mint == xnt_mint.key()
+        init_if_needed,
+        payer = admin,
+        space = 8 + NativeVault::INIT_SPACE,
+        seeds = [STAKING_REWARD_VAULT_SEED],
+        bump
     )]
-    pub staking_reward_vault: Account<'info, TokenAccount>,
+    pub staking_reward_vault: Account<'info, NativeVault>,
     #[account(
-        mut,
-        constraint = treasury_vault.owner == vault_authority.key(),
-        constraint = treasury_vault.mint == xnt_mint.key()
+        init_if_needed,
+        payer = admin,
+        space = 8 + NativeVault::INIT_SPACE,
+        seeds = [TREASURY_VAULT_SEED],
+        bump
     )]
-    pub treasury_vault: Account<'info, TokenAccount>,
+    pub treasury_vault: Account<'info, NativeVault>,
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -963,23 +957,14 @@ pub struct AdminWithdrawTreasury<'info> {
         bump = config.bumps.config
     )]
     pub config: Box<Account<'info, Config>>,
-    #[account(seeds = [VAULT_SEED], bump = config.bumps.vault_authority)]
-    /// CHECK: PDA derived from VAULT_SEED/bump used as vault authority.
-    pub vault_authority: UncheckedAccount<'info>,
     #[account(
         mut,
-        constraint = treasury_vault.key() == config.treasury_vault,
-        constraint = treasury_vault.owner == vault_authority.key(),
-        constraint = treasury_vault.mint == config.xnt_mint
+        seeds = [TREASURY_VAULT_SEED],
+        bump,
+        constraint = treasury_vault.key() == config.treasury_vault
     )]
-    pub treasury_vault: Account<'info, TokenAccount>,
-    #[account(
-        mut,
-        constraint = admin_xnt_ata.owner == admin.key(),
-        constraint = admin_xnt_ata.mint == config.xnt_mint
-    )]
-    pub admin_xnt_ata: Account<'info, TokenAccount>,
-    pub token_program: Program<'info, Token>,
+    pub treasury_vault: Account<'info, NativeVault>,
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -1003,6 +988,12 @@ pub struct AdminSetBadge<'info> {
     )]
     pub user_profile: Box<Account<'info, UserMiningProfile>>,
     pub system_program: Program<'info, System>,
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct NativeVault {
+    pub bump: u8,
 }
 
 #[account]
@@ -1117,23 +1108,19 @@ pub struct EpochRolled {
     pub epoch_end_ts: i64,
 }
 
-fn contract_terms(contract_type: u8, xnt_decimals: u8) -> Result<(u64, u64, u64)> {
-    let base = ten_pow(xnt_decimals)?;
+fn vault_available_lamports(vault: &Account<NativeVault>) -> Result<u64> {
+    let rent = Rent::get()?.minimum_balance(8 + NativeVault::INIT_SPACE);
+    Ok(vault.to_account_info().lamports().saturating_sub(rent))
+}
+
+fn contract_terms(contract_type: u8) -> Result<(u64, u64, u64)> {
+    let base = XNT_BASE;
     match contract_type {
         0 => Ok((7, 1, base)),
         1 => Ok((14, 5, base.checked_mul(10).ok_or(ErrorCode::MathOverflow)?)),
         2 => Ok((28, 7, base.checked_mul(20).ok_or(ErrorCode::MathOverflow)?)),
         _ => Err(error!(ErrorCode::InvalidContractType)),
     }
-}
-
-fn ten_pow(decimals: u8) -> Result<u64> {
-    if decimals == 0 {
-        return Ok(1);
-    }
-    Ok(10u64
-        .checked_pow(decimals as u32)
-        .ok_or(ErrorCode::MathOverflow)?)
 }
 
 fn earned_per_hp(hp: u64, acc_mind_per_hp: u128) -> Result<u128> {

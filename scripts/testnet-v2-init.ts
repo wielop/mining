@@ -1,18 +1,11 @@
 import * as anchor from "@coral-xyz/anchor";
-import {
-  NATIVE_MINT,
-  TOKEN_PROGRAM_ID,
-  createAccount,
-  createMint,
-  createSyncNativeInstruction,
-  getAccount,
-  getOrCreateAssociatedTokenAccount,
-  transfer,
-} from "@solana/spl-token";
+import { TOKEN_PROGRAM_ID, createAccount, createMint } from "@solana/spl-token";
 import { Keypair, SystemProgram, Transaction } from "@solana/web3.js";
 import dotenv from "dotenv";
 import {
   deriveConfigPda,
+  deriveStakingRewardVaultPda,
+  deriveTreasuryVaultPda,
   deriveVaultPda,
   fetchConfig,
   getProgram,
@@ -23,6 +16,8 @@ dotenv.config();
 
 const toBaseUnits = (value: bigint, decimals: number) =>
   value * 10n ** BigInt(decimals);
+
+const XNT_DECIMALS = 9;
 
 const parseBigInt = (value: string | undefined, fallback: bigint) => {
   if (!value) {
@@ -39,14 +34,13 @@ const main = async () => {
 
   const configPda = deriveConfigPda();
   const vaultAuthority = deriveVaultPda();
+  const stakingRewardVault = deriveStakingRewardVaultPda();
+  const treasuryVault = deriveTreasuryVaultPda();
 
   let cfg = await fetchConfig(connection);
   let mindMint = process.env.MIND_MINT
     ? new anchor.web3.PublicKey(process.env.MIND_MINT)
     : null;
-  const xntMint = new anchor.web3.PublicKey(
-    process.env.XNT_MINT ?? NATIVE_MINT.toBase58()
-  );
 
   if (!cfg) {
     const mindDecimals = Number(process.env.MIND_DECIMALS ?? 9);
@@ -60,20 +54,6 @@ const main = async () => {
       );
     }
 
-    const stakingRewardVault = await createAccount(
-      connection,
-      wallet.payer,
-      xntMint,
-      vaultAuthority,
-      Keypair.generate()
-    );
-    const treasuryVault = await createAccount(
-      connection,
-      wallet.payer,
-      xntMint,
-      vaultAuthority,
-      Keypair.generate()
-    );
     const stakingMindVault = await createAccount(
       connection,
       wallet.payer,
@@ -105,7 +85,6 @@ const main = async () => {
         vaultAuthority,
         config: configPda,
         mindMint,
-        xntMint,
         stakingRewardVault,
         treasuryVault,
         stakingMindVault,
@@ -115,17 +94,25 @@ const main = async () => {
       })
       .rpc();
 
-    cfg = {
-      admin: wallet.publicKey,
-      emissionPerSec,
-      mindMint,
-      xntMint,
-      stakingRewardVault,
-      treasuryVault,
-      stakingMindVault,
-      maxEffectiveHp,
-      secondsPerDay,
-    };
+    cfg = await fetchConfig(connection);
+  }
+
+  if (!cfg) {
+    throw new Error("Failed to load config after initialization.");
+  }
+
+  if (!cfg.xntMint.equals(SystemProgram.programId)) {
+    await program.methods
+      .adminUseNativeXnt()
+      .accounts({
+        admin: wallet.publicKey,
+        config: configPda,
+        stakingRewardVault,
+        treasuryVault,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+    cfg = await fetchConfig(connection);
   }
 
   if (!cfg) {
@@ -134,67 +121,37 @@ const main = async () => {
 
   const seedStaking = parseBigInt(
     process.env.SEED_STAKING_XNT_BASE,
-    toBaseUnits(1n, Number(process.env.XNT_DECIMALS ?? 9))
+    toBaseUnits(1n, XNT_DECIMALS)
   );
   const seedTreasury = parseBigInt(
     process.env.SEED_TREASURY_XNT_BASE,
-    toBaseUnits(1n, Number(process.env.XNT_DECIMALS ?? 9))
+    toBaseUnits(1n, XNT_DECIMALS)
   );
   const totalSeed = seedStaking + seedTreasury;
 
   if (totalSeed > 0n) {
-    const ownerXntAta = (
-      await getOrCreateAssociatedTokenAccount(
-        connection,
-        wallet.payer,
-        cfg.xntMint,
-        wallet.publicKey
-      )
-    ).address;
-
-    if (cfg.xntMint.equals(NATIVE_MINT)) {
-      const current = (await getAccount(connection, ownerXntAta)).amount;
-      if (current < totalSeed) {
-        const need = totalSeed - current;
-        const balance = BigInt(await connection.getBalance(wallet.publicKey));
-        if (balance > need) {
-          const wrapTx = new Transaction().add(
-            SystemProgram.transfer({
-              fromPubkey: wallet.publicKey,
-              toPubkey: ownerXntAta,
-              lamports: need,
-            }),
-            createSyncNativeInstruction(ownerXntAta)
-          );
-          await provider.sendAndConfirm(wrapTx, []);
-        } else {
-          console.warn("Insufficient SOL to wrap for seeding, skipping.");
-        }
-      }
-    }
-
-    const account = await getAccount(connection, ownerXntAta);
-    if (account.amount >= totalSeed) {
+    const balance = BigInt(await connection.getBalance(wallet.publicKey));
+    if (balance > totalSeed) {
+      const tx = new Transaction();
       if (seedTreasury > 0n) {
-        await transfer(
-          connection,
-          wallet.payer,
-          ownerXntAta,
-          cfg.treasuryVault,
-          wallet.publicKey,
-          seedTreasury
+        tx.add(
+          SystemProgram.transfer({
+            fromPubkey: wallet.publicKey,
+            toPubkey: cfg.treasuryVault,
+            lamports: Number(seedTreasury),
+          })
         );
       }
       if (seedStaking > 0n) {
-        await transfer(
-          connection,
-          wallet.payer,
-          ownerXntAta,
-          cfg.stakingRewardVault,
-          wallet.publicKey,
-          seedStaking
+        tx.add(
+          SystemProgram.transfer({
+            fromPubkey: wallet.publicKey,
+            toPubkey: cfg.stakingRewardVault,
+            lamports: Number(seedStaking),
+          })
         );
       }
+      await provider.sendAndConfirm(tx, []);
     } else {
       console.warn("Insufficient XNT balance for seeding, skipping.");
     }

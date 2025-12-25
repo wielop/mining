@@ -138,6 +138,12 @@ export const deriveConfigPda = () =>
 export const deriveVaultPda = () =>
   PublicKey.findProgramAddressSync([Buffer.from("vault")], PROGRAM_ID)[0];
 
+export const deriveStakingRewardVaultPda = () =>
+  PublicKey.findProgramAddressSync([Buffer.from("staking_reward_vault")], PROGRAM_ID)[0];
+
+export const deriveTreasuryVaultPda = () =>
+  PublicKey.findProgramAddressSync([Buffer.from("treasury_vault")], PROGRAM_ID)[0];
+
 export const deriveProfilePda = (owner: PublicKey) =>
   PublicKey.findProgramAddressSync(
     [Buffer.from("profile"), owner.toBuffer()],

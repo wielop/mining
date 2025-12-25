@@ -3,17 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAnchorWallet, useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { BN } from "@coral-xyz/anchor";
-import { Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
-import {
-  ASSOCIATED_TOKEN_PROGRAM_ID,
-  AccountLayout,
-  TOKEN_PROGRAM_ID,
-  createAssociatedTokenAccountIdempotentInstruction,
-  createInitializeAccountInstruction,
-  createTransferInstruction,
-  getAssociatedTokenAddressSync,
-  getMint,
-} from "@solana/spl-token";
+import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
+import { getMint } from "@solana/spl-token";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -24,7 +15,6 @@ import { getProgram } from "@/lib/anchor";
 import {
   deriveConfigPda,
   deriveUserProfilePda,
-  deriveVaultPda,
   fetchClockUnixTs,
   fetchConfig,
 } from "@/lib/solana";
@@ -32,6 +22,7 @@ import { formatTokenAmount, parseUiAmountToBase, shortPk } from "@/lib/format";
 import { formatError } from "@/lib/formatError";
 
 const DAY_SECONDS = 86_400n;
+const XNT_DECIMALS = 9;
 
 export function AdminDashboard() {
   const { connection } = useConnection();
@@ -53,7 +44,6 @@ export function AdminDashboard() {
   const [badgeBonusBps, setBadgeBonusBps] = useState<string>("0");
   const [rewardTopUpUi, setRewardTopUpUi] = useState<string>("");
   const [treasuryWithdrawUi, setTreasuryWithdrawUi] = useState<string>("3.8");
-  const [xntMintUi, setXntMintUi] = useState<string>("");
 
   const [busy, setBusy] = useState<string | null>(null);
   const [lastSig, setLastSig] = useState<string | null>(null);
@@ -66,23 +56,28 @@ export function AdminDashboard() {
       setConfig(cfg);
       const ts = await fetchClockUnixTs(connection);
       setNowTs(ts);
-      const [xntMintInfo, mindMintInfo] = await Promise.all([
-        getMint(connection, cfg.xntMint, "confirmed"),
-        getMint(connection, cfg.mindMint, "confirmed"),
+      const isNativeXnt = cfg.xntMint.equals(SystemProgram.programId);
+      const mindMintInfo = await getMint(connection, cfg.mindMint, "confirmed");
+      setMintDecimals({ xnt: XNT_DECIMALS, mind: mindMintInfo.decimals });
+      const [rewardBalRaw, treasuryBalRaw] = await Promise.all([
+        isNativeXnt
+          ? connection.getBalance(cfg.stakingRewardVault, "confirmed")
+          : connection.getTokenAccountBalance(cfg.stakingRewardVault, "confirmed"),
+        isNativeXnt
+          ? connection.getBalance(cfg.treasuryVault, "confirmed")
+          : connection.getTokenAccountBalance(cfg.treasuryVault, "confirmed"),
       ]);
-      setMintDecimals({ xnt: xntMintInfo.decimals, mind: mindMintInfo.decimals });
-      const [rewardBal, treasuryBal] = await Promise.all([
-        connection.getTokenAccountBalance(cfg.stakingRewardVault, "confirmed"),
-        connection.getTokenAccountBalance(cfg.treasuryVault, "confirmed"),
-      ]);
-      setStakingRewardBalance(BigInt(rewardBal.value.amount || "0"));
-      setTreasuryBalance(BigInt(treasuryBal.value.amount || "0"));
+      const rewardBal =
+        typeof rewardBalRaw === "number" ? BigInt(rewardBalRaw) : BigInt(rewardBalRaw.value.amount || "0");
+      const treasuryBal =
+        typeof treasuryBalRaw === "number" ? BigInt(treasuryBalRaw) : BigInt(treasuryBalRaw.value.amount || "0");
+      setStakingRewardBalance(rewardBal);
+      setTreasuryBalance(treasuryBal);
       if (mindMintInfo.decimals >= 0) {
         const emissionPerDay = (cfg.emissionPerSec * DAY_SECONDS) / 10n ** BigInt(mindMintInfo.decimals);
         setEmissionPerDayUi(emissionPerDay.toString());
       }
       setMaxEffectiveHpUi(cfg.maxEffectiveHp.toString());
-      setXntMintUi((prev) => (prev ? prev : cfg.xntMint.toBase58()));
     } catch (e: unknown) {
       console.error(e);
       setError(formatError(e));
@@ -211,30 +206,12 @@ export function AdminDashboard() {
     if (amountBase <= 0n) return;
     const program = getProgram(connection, anchorWallet);
     await withTx("Fund reward vault", async () => {
-      const tx = new Transaction();
-      const adminAta = getAssociatedTokenAddressSync(config.xntMint, publicKey);
-      const ataInfo = await connection.getAccountInfo(adminAta, "confirmed");
-      if (!ataInfo) {
-        tx.add(
-          createAssociatedTokenAccountIdempotentInstruction(
-            publicKey,
-            adminAta,
-            publicKey,
-            config.xntMint,
-            TOKEN_PROGRAM_ID,
-            ASSOCIATED_TOKEN_PROGRAM_ID
-          )
-        );
-      }
-      tx.add(
-        createTransferInstruction(
-          adminAta,
-          config.stakingRewardVault,
-          publicKey,
-          amountBase,
-          [],
-          TOKEN_PROGRAM_ID
-        )
+      const tx = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: publicKey,
+          toPubkey: config.stakingRewardVault,
+          lamports: Number(amountBase),
+        })
       );
       return await program.provider.sendAndConfirm(tx, []);
     });
@@ -252,86 +229,19 @@ export function AdminDashboard() {
     if (amountBase <= 0n) return;
     const program = getProgram(connection, anchorWallet);
     await withTx("Withdraw treasury", async () => {
-      const tx = new Transaction();
-      const adminAta = getAssociatedTokenAddressSync(config.xntMint, publicKey);
-      const ataInfo = await connection.getAccountInfo(adminAta, "confirmed");
-      if (!ataInfo) {
-        tx.add(
-          createAssociatedTokenAccountIdempotentInstruction(
-            publicKey,
-            adminAta,
-            publicKey,
-            config.xntMint,
-            TOKEN_PROGRAM_ID,
-            ASSOCIATED_TOKEN_PROGRAM_ID
-          )
-        );
-      }
-      const instruction = await program.methods
+      const sig = await program.methods
         .adminWithdrawTreasury(new BN(amountBase.toString()))
         .accounts({
           admin: publicKey,
           config: deriveConfigPda(),
-          vaultAuthority: deriveVaultPda(),
           treasuryVault: config.treasuryVault,
-          adminXntAta: adminAta,
-          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
         })
-        .instruction();
-      tx.add(instruction);
-      return await program.provider.sendAndConfirm(tx, []);
+        .rpc();
+      return sig;
     });
   };
 
-  const onUpdateXntMint = async () => {
-    if (!anchorWallet || !config || !publicKey) return;
-    let newMint: PublicKey;
-    try {
-      newMint = new PublicKey(xntMintUi.trim());
-    } catch {
-      setError("Invalid XNT mint address");
-      return;
-    }
-    const rewardVault = Keypair.generate();
-    const treasuryVault = Keypair.generate();
-    const vaultAuthority = deriveVaultPda();
-    const rent = await connection.getMinimumBalanceForRentExemption(AccountLayout.span);
-    const tx = new Transaction();
-    tx.add(
-      SystemProgram.createAccount({
-        fromPubkey: publicKey,
-        newAccountPubkey: rewardVault.publicKey,
-        lamports: rent,
-        space: AccountLayout.span,
-        programId: TOKEN_PROGRAM_ID,
-      }),
-      createInitializeAccountInstruction(rewardVault.publicKey, newMint, vaultAuthority, TOKEN_PROGRAM_ID),
-      SystemProgram.createAccount({
-        fromPubkey: publicKey,
-        newAccountPubkey: treasuryVault.publicKey,
-        lamports: rent,
-        space: AccountLayout.span,
-        programId: TOKEN_PROGRAM_ID,
-      }),
-      createInitializeAccountInstruction(treasuryVault.publicKey, newMint, vaultAuthority, TOKEN_PROGRAM_ID)
-    );
-    const program = getProgram(connection, anchorWallet);
-    await withTx("Update XNT mint", async () => {
-      const instruction = await program.methods
-        .adminUpdateXntMint()
-        .accounts({
-          admin: publicKey,
-          config: deriveConfigPda(),
-          vaultAuthority,
-          xntMint: newMint,
-          stakingRewardVault: rewardVault.publicKey,
-          treasuryVault: treasuryVault.publicKey,
-        })
-        .instruction();
-      tx.add(instruction);
-      return await program.provider.sendAndConfirm(tx, [rewardVault, treasuryVault]);
-    });
-  };
 
   return (
     <div className="min-h-screen bg-ink text-white">
@@ -400,18 +310,6 @@ export function AdminDashboard() {
             <Input value={rewardTopUpUi} onChange={setRewardTopUpUi} />
             <Button className="mt-4" onClick={() => void onFundRewardVault()} disabled={!isAdmin || busy != null}>
               {busy === "Fund reward vault" ? "Submitting..." : "Top up reward vault"}
-            </Button>
-          </Card>
-
-          <Card className="p-4">
-            <div className="text-sm font-semibold">Switch XNT mint</div>
-            <div className="mt-2 text-xs text-zinc-400">
-              Creates fresh reward and treasury vaults for the new mint.
-            </div>
-            <div className="mt-3 text-xs text-zinc-400">New XNT mint</div>
-            <Input value={xntMintUi} onChange={setXntMintUi} />
-            <Button className="mt-4" onClick={() => void onUpdateXntMint()} disabled={!isAdmin || busy != null}>
-              {busy === "Update XNT mint" ? "Submitting..." : "Update XNT mint"}
             </Button>
           </Card>
 
