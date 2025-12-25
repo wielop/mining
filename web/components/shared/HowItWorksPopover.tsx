@@ -7,14 +7,18 @@ export function HowItWorksPopover() {
         How it works
       </summary>
       <div className="absolute right-0 mt-2 w-80 rounded-2xl border border-cyan-400/20 bg-ink/95 p-4 text-xs text-zinc-300 shadow-[0_0_24px_rgba(34,242,255,0.15)]">
-        <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Mining flow</div>
-        <ol className="mt-3 space-y-2 text-xs text-zinc-300">
-          <li>1) Buy a mining contract to get fixed hashpower (HP) for a set time.</li>
-          <li>2) Global MIND emission is split pro-rata to active HP; if network HP is zero, emission pauses.</li>
-          <li>3) Claim MIND anytime; expired contracts can be deactivated to free HP.</li>
-          <li>4) Stake MIND to earn XNT rewards (smoothed per epoch).</li>
-          <li>5) Badges boost staking payouts up to +20%.</li>
-        </ol>
+        <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">MINING FLOW</div>
+        <div className="mt-3 space-y-2 text-xs text-zinc-300">
+          <div>Buy a mining contract to get hashpower (HP) for a set time.</div>
+          <div>Your HP stays fixed, but your share can change as others join or expire.</div>
+          <div>Global MIND emission is split pro-rata across all active HP.</div>
+          <div>If network HP is zero, emission pauses.</div>
+          <div>Claim MIND anytime.</div>
+          <div>When a contract expires, you can deactivate it to free up HP.</div>
+          <div>Stake MIND to earn XNT rewards.</div>
+          <div>Rewards are distributed over time, based on your share of the pool.</div>
+          <div>Badges can boost staking rewards — up to a +20% bonus cap.</div>
+        </div>
       </div>
     </details>
   );
