@@ -17,9 +17,11 @@ import {
   deriveUserProfilePda,
   fetchClockUnixTs,
   fetchConfig,
+  getProgramId,
 } from "@/lib/solana";
 import { formatTokenAmount, parseUiAmountToBase, shortPk } from "@/lib/format";
 import { formatError } from "@/lib/formatError";
+import { decodeMinerPositionAccount, MINER_POSITION_LEN } from "@/lib/decoders";
 
 const DAY_SECONDS = 86_400n;
 const XNT_DECIMALS = 9;
@@ -35,6 +37,12 @@ export function AdminDashboard() {
   const [mintDecimals, setMintDecimals] = useState<{ xnt: number; mind: number } | null>(null);
   const [stakingRewardBalance, setStakingRewardBalance] = useState<bigint>(0n);
   const [treasuryBalance, setTreasuryBalance] = useState<bigint>(0n);
+  const [activeMiners, setActiveMiners] = useState<
+    Array<{ owner: string; rigs: number; hp: bigint }>
+  >([]);
+  const [activeMinerTotal, setActiveMinerTotal] = useState(0);
+  const [activeRigTotal, setActiveRigTotal] = useState(0);
+  const [activeMinerUpdated, setActiveMinerUpdated] = useState<number | null>(null);
 
   const [emissionPerDayUi, setEmissionPerDayUi] = useState<string>("");
   const [maxEffectiveHpUi, setMaxEffectiveHpUi] = useState<string>("");
@@ -106,6 +114,39 @@ export function AdminDashboard() {
         setEmissionPerDayUi(emissionPerDay.toString());
       }
       setMaxEffectiveHpUi(cfg.maxEffectiveHp.toString());
+      try {
+        const programId = getProgramId();
+        const positions = await connection.getProgramAccounts(programId, {
+          commitment: "confirmed",
+          filters: [{ dataSize: MINER_POSITION_LEN }],
+        });
+        const now = ts ?? Math.floor(Date.now() / 1000);
+        const map = new Map<string, { rigs: number; hp: bigint }>();
+        let totalRigs = 0;
+        for (const entry of positions) {
+          const decoded = decodeMinerPositionAccount(Buffer.from(entry.account.data));
+          if (decoded.deactivated || decoded.endTs <= now) continue;
+          const ownerKey = new PublicKey(decoded.owner).toBase58();
+          const current = map.get(ownerKey) ?? { rigs: 0, hp: 0n };
+          current.rigs += 1;
+          current.hp += decoded.hp;
+          map.set(ownerKey, current);
+          totalRigs += 1;
+        }
+        const list = Array.from(map.entries())
+          .map(([owner, value]) => ({ owner, rigs: value.rigs, hp: value.hp }))
+          .sort((a, b) => (b.rigs !== a.rigs ? b.rigs - a.rigs : Number(b.hp - a.hp)));
+        setActiveMiners(list);
+        setActiveMinerTotal(map.size);
+        setActiveRigTotal(totalRigs);
+        setActiveMinerUpdated(now);
+      } catch (err) {
+        console.warn("Failed to load active miners", err);
+        setActiveMiners([]);
+        setActiveMinerTotal(0);
+        setActiveRigTotal(0);
+        setActiveMinerUpdated(null);
+      }
     } catch (e: unknown) {
       console.error(e);
       setError(formatError(e));
@@ -307,6 +348,31 @@ export function AdminDashboard() {
             </div>
           </Card>
         </div>
+
+        <Card className="mt-4 p-4">
+          <div className="text-sm font-semibold">Active miners</div>
+          <div className="mt-2 text-xs text-zinc-400">
+            Unique addresses: {activeMinerTotal} | Active rigs: {activeRigTotal}
+            {activeMinerUpdated != null ? ` | Updated ${activeMinerUpdated}` : ""}
+          </div>
+          <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
+            {activeMiners.length === 0 ? (
+              <div className="text-xs text-zinc-500">No active rigs found.</div>
+            ) : (
+              activeMiners.map((entry) => (
+                <div
+                  key={entry.owner}
+                  className="flex flex-col gap-1 border-b border-white/5 pb-2 text-xs text-zinc-300"
+                >
+                  <div className="font-mono break-all">{entry.owner}</div>
+                  <div className="text-zinc-500">
+                    Rigs: {entry.rigs} | HP: {entry.hp.toString()}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </Card>
 
         <section className="mt-8 grid gap-4 lg:grid-cols-2">
           <Card className="p-4">
