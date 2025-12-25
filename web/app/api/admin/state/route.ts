@@ -1,14 +1,23 @@
 import { NextResponse } from "next/server";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { getMint } from "@solana/spl-token";
-import { decodeMinerPositionAccount, MINER_POSITION_LEN } from "@/lib/decoders";
+import {
+  decodeMinerPositionAccount,
+  decodeUserStakeAccount,
+  MINER_POSITION_LEN,
+  USER_STAKE_LEN,
+} from "@/lib/decoders";
 import { fetchConfig, fetchClockUnixTs, getProgramId, getRpcUrl } from "@/lib/solana";
 import type { AlertEntry, FlowStats, ProtocolSnapshot } from "@/lib/adminData";
 import { isAlertResolved } from "@/lib/adminAlertsStore";
+import { getErrorCount, getRpcStats, getTxStats, recordRpcSample } from "@/lib/adminMetricsStore";
+import { scoreEconomicHealth, scoreTechnicalHealth } from "@/lib/healthScoring";
 
 const XNT_DECIMALS = 9;
 const NATIVE_VAULT_SPACE = 9;
 const BUFFER_DAYS = 3;
+const WINDOW_15M = 15 * 60 * 1000;
+const WINDOW_10M = 10 * 60 * 1000;
 
 const toUi = (amount: bigint, decimals: number) =>
   Number(amount) / Math.pow(10, decimals);
@@ -91,6 +100,15 @@ export async function GET() {
   ];
   // TODO: Replace zeroed FlowStats with real aggregation from event logs / DB.
 
+  // Lightweight RPC health probe to collect latency + success samples.
+  const rpcStart = Date.now();
+  try {
+    await connection.getSlot("confirmed");
+    recordRpcSample({ ts: Date.now(), ok: true, latencyMs: Date.now() - rpcStart }, WINDOW_15M);
+  } catch {
+    recordRpcSample({ ts: Date.now(), ok: false, latencyMs: Date.now() - rpcStart }, WINDOW_15M);
+  }
+
   const alerts: AlertEntry[] = [];
 
   const flow24h = flows.find((item) => item.window === "24h")!;
@@ -121,10 +139,16 @@ export async function GET() {
   }
 
   const programId = getProgramId();
-  const positions = await connection.getProgramAccounts(programId, {
-    commitment: "confirmed",
-    filters: [{ dataSize: MINER_POSITION_LEN }],
-  });
+  const [positions, stakes] = await Promise.all([
+    connection.getProgramAccounts(programId, {
+      commitment: "confirmed",
+      filters: [{ dataSize: MINER_POSITION_LEN }],
+    }),
+    connection.getProgramAccounts(programId, {
+      commitment: "confirmed",
+      filters: [{ dataSize: USER_STAKE_LEN }],
+    }),
+  ]);
   const hpByOwner = new Map<string, bigint>();
   for (const entry of positions) {
     const decoded = decodeMinerPositionAccount(Buffer.from(entry.account.data));
@@ -154,5 +178,54 @@ export async function GET() {
     });
   }
 
-  return NextResponse.json({ snapshot, flows, alerts });
+  let maxStakingShare = 0;
+  if (cfg.stakingTotalStakedMind > 0n) {
+    for (const entry of stakes) {
+      const decoded = decodeUserStakeAccount(Buffer.from(entry.account.data));
+      if (decoded.stakedMind === 0n) continue;
+      const share = Number((decoded.stakedMind * 10_000n) / cfg.stakingTotalStakedMind) / 100;
+      if (share > maxStakingShare) {
+        maxStakingShare = share;
+      }
+    }
+  }
+  const maxConcentration =
+    topOwner && topOwner.share > maxStakingShare ? topOwner.share : maxStakingShare || null;
+
+  const flow7d = flows.find((item) => item.window === "7d")!;
+  const flow30d = flows.find((item) => item.window === "30d")!;
+  const splitTotal = flow7d.xntToStakingRewards + flow7d.xntToTreasury;
+  const splitDiffPct =
+    splitTotal > 0
+      ? Math.abs(flow7d.xntToStakingRewards / splitTotal - 0.3) * 100
+      : null;
+  const treasuryNet =
+    flow30d.xntToTreasury - flow30d.xntUsedForBuyback - flow30d.xntAddedToLp;
+  const treasuryRatio =
+    flow30d.xntFromMining > 0 ? treasuryNet / flow30d.xntFromMining : null;
+
+  const rewardRatePerDay = toUi(cfg.stakingRewardRateXntPerSec * 86_400n, XNT_DECIMALS);
+  const runwayDays =
+    rewardRatePerDay > 0 ? snapshot.staking.rewardPoolXnt / rewardRatePerDay : null;
+
+  const { successRate: rpcSuccess } = getRpcStats(WINDOW_15M);
+  const { successRate: txSuccess, medianLatency: txLatency } = getTxStats(WINDOW_15M);
+  const appErrors = getErrorCount(WINDOW_10M);
+
+  const economic = scoreEconomicHealth({
+    runwayDays,
+    splitDiffPct,
+    concentrationPct: maxConcentration,
+    treasuryNet: flow30d.xntFromMining > 0 ? treasuryNet : null,
+    treasuryRatio,
+  });
+
+  const technical = scoreTechnicalHealth({
+    rpcSuccessRate: rpcSuccess,
+    txSuccessRate: txSuccess,
+    txLatencyMedianMs: txLatency,
+    appErrors,
+  });
+
+  return NextResponse.json({ snapshot, flows, alerts, health: { economic, technical } });
 }

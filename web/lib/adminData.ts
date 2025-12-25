@@ -34,6 +34,20 @@ export type FlowStats = {
 
 export type AlertLevel = "INFO" | "WARN" | "CRITICAL";
 
+export type EconomicHealth = {
+  score: number;
+  state: "GREEN" | "YELLOW" | "RED";
+  summary: string;
+  details: Array<{ label: string; value: string; impact: number }>;
+};
+
+export type TechnicalHealth = {
+  score: number;
+  state: "GREEN" | "YELLOW" | "RED";
+  summary: string;
+  details: Array<{ label: string; value: string; impact: number }>;
+};
+
 export type AlertEntry = {
   id: string;
   level: AlertLevel;

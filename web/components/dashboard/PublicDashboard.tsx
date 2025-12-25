@@ -40,6 +40,7 @@ import {
 } from "@/lib/decoders";
 import { formatDurationSeconds, formatTokenAmount, parseUiAmountToBase, shortPk } from "@/lib/format";
 import { formatError } from "@/lib/formatError";
+import { sendTelemetry } from "@/lib/telemetryClient";
 
 const ACC_SCALE = 1_000_000_000_000_000_000n;
 const AUTO_CLAIM_INTERVAL_MS = 15_000;
@@ -621,19 +622,54 @@ export function PublicDashboard() {
     };
   };
 
+  const mapTxAction = (label: string) => {
+    switch (label) {
+      case "Buy contract":
+        return "buy_contract";
+      case "Claim all rigs":
+        return "claim_mind";
+      case "Stake MIND":
+        return "stake_mind";
+      case "Unstake MIND":
+        return "unstake_mind";
+      case "Claim XNT":
+        return "claim_xnt";
+      case "Deactivate position":
+        return "deactivate_position";
+      default:
+        return "other";
+    }
+  };
+
   const withTx = useCallback(
     async (label: string, fn: () => Promise<string>) => {
+      const start = typeof performance !== "undefined" ? performance.now() : Date.now();
+      let ok = false;
+      let errorMsg: string | undefined;
       setBusy(label);
       setError(null);
       try {
         const sig = await fn();
         setLastSig(sig);
         pushToast({ title: label, description: shortPk(sig, 6) });
+        ok = true;
       } catch (e: unknown) {
         console.error(e);
-        setError(formatError(e));
+        errorMsg = formatError(e);
+        setError(errorMsg);
       } finally {
         setBusy(null);
+        const durationMs =
+          (typeof performance !== "undefined" ? performance.now() : Date.now()) - start;
+        void sendTelemetry({
+          kind: "tx",
+          action: mapTxAction(label),
+          ok,
+          durationMs,
+        });
+        if (!ok && errorMsg) {
+          void sendTelemetry({ kind: "app_error", message: errorMsg });
+        }
         await refresh();
       }
     },

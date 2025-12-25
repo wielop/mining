@@ -24,6 +24,7 @@ import {
 } from "@/lib/solana";
 import { formatTokenAmount, parseUiAmountToBase, shortPk } from "@/lib/format";
 import { formatError } from "@/lib/formatError";
+import { sendTelemetry } from "@/lib/telemetryClient";
 import {
   decodeMinerPositionAccount,
   decodeUserStakeAccount,
@@ -250,18 +251,53 @@ export function AdminDashboard() {
     return publicKey.equals(config.admin);
   }, [publicKey, config]);
 
+  const mapTxAction = (label: string) => {
+    switch (label) {
+      case "Update config":
+        return "admin_update_config";
+      case "Roll epoch":
+        return "roll_epoch";
+      case "Set badge":
+        return "admin_set_badge";
+      case "Fund reward vault":
+        return "admin_fund_reward";
+      case "Withdraw treasury":
+        return "admin_withdraw_treasury";
+      case "Use native XNT vaults":
+        return "admin_sync_vaults";
+      default:
+        return "admin_other";
+    }
+  };
+
   const withTx = async (label: string, fn: () => Promise<string>) => {
+    const start = typeof performance !== "undefined" ? performance.now() : Date.now();
+    let ok = false;
+    let errorMsg: string | undefined;
     setBusy(label);
     setError(null);
     try {
       const sig = await fn();
       setLastSig(sig);
       pushToast({ title: label, description: shortPk(sig, 6) });
+      ok = true;
     } catch (e: unknown) {
       console.error(e);
-      setError(formatError(e));
+      errorMsg = formatError(e);
+      setError(errorMsg);
     } finally {
       setBusy(null);
+      const durationMs =
+        (typeof performance !== "undefined" ? performance.now() : Date.now()) - start;
+      void sendTelemetry({
+        kind: "tx",
+        action: mapTxAction(label),
+        ok,
+        durationMs,
+      });
+      if (!ok && errorMsg) {
+        void sendTelemetry({ kind: "app_error", message: errorMsg });
+      }
       await refresh();
     }
   };

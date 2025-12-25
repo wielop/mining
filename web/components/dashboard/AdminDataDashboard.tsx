@@ -8,12 +8,19 @@ import { TopBar } from "@/components/shared/TopBar";
 import { AdminNav } from "@/components/admin/AdminNav";
 import { fetchConfig } from "@/lib/solana";
 import { formatError } from "@/lib/formatError";
-import type { AlertEntry, FlowStats, ProtocolSnapshot } from "@/lib/adminData";
+import type {
+  AlertEntry,
+  EconomicHealth,
+  FlowStats,
+  ProtocolSnapshot,
+  TechnicalHealth,
+} from "@/lib/adminData";
 
 type AdminState = {
   snapshot: ProtocolSnapshot;
   flows: FlowStats[];
   alerts: AlertEntry[];
+  health: { economic: EconomicHealth; technical: TechnicalHealth };
 };
 
 const formatNumber = (value: number, digits = 0) =>
@@ -28,6 +35,64 @@ const formatToken = (value: number, digits = 2) => formatNumber(value, digits);
 
 const formatTimestamp = (value: string | null) =>
   value ? new Date(value).toLocaleString() : "-";
+
+const healthStyles = {
+  GREEN: "border-emerald-400/40 bg-emerald-400/10 text-emerald-100",
+  YELLOW: "border-amber-300/40 bg-amber-300/10 text-amber-100",
+  RED: "border-rose-400/40 bg-rose-400/10 text-rose-100",
+} as const;
+
+const impactBadge = (impact: number) =>
+  impact >= 0 ? "text-emerald-200" : "text-rose-200";
+
+const ImpactIcon = ({ impact }: { impact: number }) => (
+  <span className={impactBadge(impact)}>{impact >= 0 ? "↑" : "↓"}</span>
+);
+
+// Expandable health card: shows summary + scoring breakdown.
+function HealthCard({
+  title,
+  health,
+}: {
+  title: string;
+  health: EconomicHealth | TechnicalHealth;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Card className="p-4">
+      <button type="button" onClick={() => setOpen((prev) => !prev)} className="w-full text-left">
+        <div className="flex items-center gap-4">
+          <div
+            className={[
+              "flex h-14 w-14 items-center justify-center rounded-full border text-lg font-semibold",
+              healthStyles[health.state],
+            ].join(" ")}
+          >
+            {Math.round(health.score)}
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-[0.2em] text-zinc-400">{title}</div>
+            <div className="mt-1 text-sm text-zinc-200">{health.summary}</div>
+            <div className="mt-1 text-[11px] text-zinc-500">State: {health.state}</div>
+          </div>
+        </div>
+      </button>
+      {open ? (
+        <div className="mt-4 space-y-2 text-xs text-zinc-300">
+          {health.details.map((detail) => (
+            <div key={detail.label} className="flex items-center justify-between gap-3">
+              <div className="text-zinc-400">{detail.label}</div>
+              <div className="flex items-center gap-2">
+                <ImpactIcon impact={detail.impact} />
+                <span className="text-zinc-200">{detail.value}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </Card>
+  );
+}
 
 // Admin Data Center dashboard for protocol snapshot, flows, and alerts.
 export function AdminDataDashboard() {
@@ -110,6 +175,18 @@ export function AdminDataDashboard() {
 
         {state ? (
           <>
+            {state.health.economic.state === "RED" || state.health.technical.state === "RED" ? (
+              <Card className="mt-4 border border-rose-400/30 bg-rose-500/10 p-4 text-sm text-rose-100">
+                Health is critical. Review the details below before making sensitive actions.
+              </Card>
+            ) : null}
+
+            {/* Health overview cards for quick risk scanning. */}
+            <section className="mt-6 grid gap-4 lg:grid-cols-2">
+              <HealthCard title="Economic Health" health={state.health.economic} />
+              <HealthCard title="Technical Health" health={state.health.technical} />
+            </section>
+
             <section className="mt-6 grid gap-4 lg:grid-cols-3">
               <Card className="p-4">
                 <div className="text-xs uppercase tracking-[0.2em] text-zinc-400">
@@ -162,7 +239,7 @@ export function AdminDataDashboard() {
                   <Button
                     key={value}
                     size="sm"
-                    variant={window === value ? "default" : "ghost"}
+                    variant={window === value ? "primary" : "ghost"}
                     onClick={() => setWindow(value)}
                   >
                     {value}
