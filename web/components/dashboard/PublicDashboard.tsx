@@ -94,6 +94,8 @@ export function PublicDashboard() {
   const [stakingRewardBalance, setStakingRewardBalance] = useState<bigint>(0n);
   const [stakingMindBalance, setStakingMindBalance] = useState<bigint>(0n);
   const [networkTrend, setNetworkTrend] = useState<{ delta: bigint; pct: number } | null>(null);
+  const [activeMinerTotal, setActiveMinerTotal] = useState(0);
+  const [activeRigTotal, setActiveRigTotal] = useState(0);
 
   const [selectedContract, setSelectedContract] = useState<number>(1);
   const [stakeAmountUi, setStakeAmountUi] = useState<string>("");
@@ -181,7 +183,7 @@ export function PublicDashboard() {
       }
 
       const programId = getProgramId();
-      const [posGpa, profileAcc, stakeAcc] = await Promise.all([
+      const [posGpa, profileAcc, stakeAcc, allPositions] = await Promise.all([
         connection.getProgramAccounts(programId, {
           commitment: "confirmed",
           filters: [
@@ -191,6 +193,10 @@ export function PublicDashboard() {
         }),
         connection.getAccountInfo(deriveUserProfilePda(publicKey), "confirmed"),
         connection.getAccountInfo(deriveUserStakePda(publicKey), "confirmed"),
+        connection.getProgramAccounts(programId, {
+          commitment: "confirmed",
+          filters: [{ dataSize: MINER_POSITION_LEN }],
+        }),
       ]);
       if (isStale()) return;
 
@@ -208,6 +214,25 @@ export function PublicDashboard() {
       setUserStake(
         stakeAcc?.data ? tryDecodeUserStakeAccount(Buffer.from(stakeAcc.data)) : null
       );
+
+      try {
+        const now = ts;
+        const unique = new Set<string>();
+        let rigs = 0;
+        for (const entry of allPositions) {
+          const decoded = decodeMinerPositionAccount(Buffer.from(entry.account.data));
+          if (decoded.deactivated || decoded.endTs <= now) continue;
+          const ownerKey = new PublicKey(decoded.owner).toBase58();
+          unique.add(ownerKey);
+          rigs += 1;
+        }
+        setActiveMinerTotal(unique.size);
+        setActiveRigTotal(rigs);
+      } catch (err) {
+        console.warn("Failed to load active miners", err);
+        setActiveMinerTotal(0);
+        setActiveRigTotal(0);
+      }
 
       const mindAta = getAssociatedTokenAddressSync(cfg.mindMint, publicKey);
       let xntBal: bigint;
@@ -956,12 +981,8 @@ export function PublicDashboard() {
                 : "-"}
             </Badge>
             <Badge variant="muted">
-              Network 24h:{" "}
-              {networkTrend
-                ? `${networkTrend.delta.toString()} (${networkTrend.pct.toFixed(2)}%)`
-                : "0 (warming up)"}
+              Active miners: Unique addresses: {activeMinerTotal} | Active rigs: {activeRigTotal}
             </Badge>
-            <Badge variant="muted">Badge bonus: +{effectiveBonusBps / 100}%</Badge>
             <Badge variant="muted">Reward pool: {rewardPoolBadge} XNT</Badge>
             <Badge variant="muted">Total staked: {totalStakedBadge} MIND</Badge>
           </div>
