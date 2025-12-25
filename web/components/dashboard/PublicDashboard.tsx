@@ -102,6 +102,7 @@ export function PublicDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [lastClaimAmount, setLastClaimAmount] = useState<bigint | null>(null);
+  const [lastClaimTs, setLastClaimTs] = useState<number | null>(null);
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
   const [stopDialogTarget, setStopDialogTarget] = useState<{
     pubkey: string;
@@ -239,19 +240,23 @@ export function PublicDashboard() {
   useEffect(() => {
     if (!publicKey || typeof window === "undefined") {
       setLastClaimAmount(null);
+      setLastClaimTs(null);
       return;
     }
     const key = `mining_v2_last_claim_${publicKey.toBase58()}`;
     const raw = window.localStorage.getItem(key);
     if (!raw) {
       setLastClaimAmount(null);
+      setLastClaimTs(null);
       return;
     }
     try {
-      const parsed = JSON.parse(raw) as { amount: string };
+      const parsed = JSON.parse(raw) as { amount: string; ts?: number };
       setLastClaimAmount(BigInt(parsed.amount));
+      setLastClaimTs(typeof parsed.ts === "number" ? parsed.ts : null);
     } catch {
       setLastClaimAmount(null);
+      setLastClaimTs(null);
     }
   }, [publicKey]);
 
@@ -525,6 +530,12 @@ export function PublicDashboard() {
     mintDecimals && lastClaimAmount != null
       ? formatRoundedToken(lastClaimAmount, mintDecimals.mind)
       : null;
+  const lastClaimAgo =
+    lastClaimTs != null
+      ? formatDurationSeconds(
+          Math.max(0, (nowTs ?? Math.floor(Date.now() / 1000)) - lastClaimTs)
+        )
+      : null;
   const showLastClaim = lastClaimAmount != null && lastClaimAmount > 0n;
   const showClaimableAmount = mintDecimals != null && !claimableIsTiny && totalPendingMind > 0n;
 
@@ -641,13 +652,18 @@ export function PublicDashboard() {
       const delta = after > before ? after - before : 0n;
       if (delta > 0n) {
         setLastClaimAmount(delta);
+        const claimTs = nowTs ?? Math.floor(Date.now() / 1000);
+        setLastClaimTs(claimTs);
         if (typeof window !== "undefined") {
           const key = `mining_v2_last_claim_${publicKey.toBase58()}`;
-          window.localStorage.setItem(key, JSON.stringify({ amount: delta.toString() }));
+          window.localStorage.setItem(
+            key,
+            JSON.stringify({ amount: delta.toString(), ts: claimTs })
+          );
         }
       }
     }
-  }, [config, connection, onClaimAll, publicKey]);
+  }, [config, connection, nowTs, onClaimAll, publicKey]);
   const onDeactivate = async (posPubkey: string, ownerBytes: Uint8Array) => {
     if (!anchorWallet || !config) return;
     const program = getProgram(connection, anchorWallet);
@@ -840,11 +856,14 @@ export function PublicDashboard() {
                   <div className="text-[11px] uppercase tracking-[0.2em] text-emerald-200">
                     Last claimed
                   </div>
-                  <div className="mt-2 text-4xl font-semibold text-emerald-200">
-                    {lastClaimRounded} MIND
-                  </div>
+                <div className="mt-2 text-4xl font-semibold text-emerald-200">
+                  {lastClaimRounded} MIND
                 </div>
-              ) : null}
+                {lastClaimAgo ? (
+                  <div className="mt-1 text-[11px] text-zinc-500">Claimed {lastClaimAgo} ago</div>
+                ) : null}
+              </div>
+            ) : null}
               {showClaimableAmount ? (
                 <div className="mt-3 flex items-baseline gap-1">
                   <button
