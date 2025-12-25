@@ -536,6 +536,34 @@ pub mod mining_v2 {
         Ok(())
     }
 
+    pub fn admin_withdraw_treasury(
+        ctx: Context<AdminWithdrawTreasury>,
+        amount: u64,
+    ) -> Result<()> {
+        require!(amount > 0, ErrorCode::InvalidAmount);
+        let cfg = &ctx.accounts.config;
+        require_keys_eq!(cfg.admin, ctx.accounts.admin.key(), ErrorCode::Unauthorized);
+        require!(
+            ctx.accounts.treasury_vault.amount >= amount,
+            ErrorCode::InsufficientVaultBalance
+        );
+
+        let signer_seeds: &[&[u8]] = &[VAULT_SEED, &[cfg.bumps.vault_authority]];
+        token::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.treasury_vault.to_account_info(),
+                    to: ctx.accounts.admin_xnt_ata.to_account_info(),
+                    authority: ctx.accounts.vault_authority.to_account_info(),
+                },
+                &[signer_seeds],
+            ),
+            amount,
+        )?;
+        Ok(())
+    }
+
     pub fn admin_set_badge(
         ctx: Context<AdminSetBadge>,
         badge_tier: u8,
@@ -877,6 +905,35 @@ pub struct AdminUpdateConfig<'info> {
         bump = config.bumps.config
     )]
     pub config: Box<Account<'info, Config>>,
+}
+
+#[derive(Accounts)]
+pub struct AdminWithdrawTreasury<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [CONFIG_SEED],
+        bump = config.bumps.config
+    )]
+    pub config: Box<Account<'info, Config>>,
+    #[account(seeds = [VAULT_SEED], bump = config.bumps.vault_authority)]
+    /// CHECK: PDA derived from VAULT_SEED/bump used as vault authority.
+    pub vault_authority: UncheckedAccount<'info>,
+    #[account(
+        mut,
+        constraint = treasury_vault.key() == config.treasury_vault,
+        constraint = treasury_vault.owner == vault_authority.key(),
+        constraint = treasury_vault.mint == config.xnt_mint
+    )]
+    pub treasury_vault: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        constraint = admin_xnt_ata.owner == admin.key(),
+        constraint = admin_xnt_ata.mint == config.xnt_mint
+    )]
+    pub admin_xnt_ata: Account<'info, TokenAccount>,
+    pub token_program: Program<'info, Token>,
 }
 
 #[derive(Accounts)]

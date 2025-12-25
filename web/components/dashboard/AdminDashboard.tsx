@@ -22,6 +22,7 @@ import { getProgram } from "@/lib/anchor";
 import {
   deriveConfigPda,
   deriveUserProfilePda,
+  deriveVaultPda,
   fetchClockUnixTs,
   fetchConfig,
 } from "@/lib/solana";
@@ -49,6 +50,7 @@ export function AdminDashboard() {
   const [badgeTier, setBadgeTier] = useState<string>("0");
   const [badgeBonusBps, setBadgeBonusBps] = useState<string>("0");
   const [rewardTopUpUi, setRewardTopUpUi] = useState<string>("");
+  const [treasuryWithdrawUi, setTreasuryWithdrawUi] = useState<string>("3.8");
 
   const [busy, setBusy] = useState<string | null>(null);
   const [lastSig, setLastSig] = useState<string | null>(null);
@@ -234,6 +236,49 @@ export function AdminDashboard() {
     });
   };
 
+  const onWithdrawTreasury = async () => {
+    if (!anchorWallet || !config || !mintDecimals || !publicKey) return;
+    let amountBase: bigint;
+    try {
+      amountBase = parseUiAmountToBase(treasuryWithdrawUi, mintDecimals.xnt);
+    } catch (e: unknown) {
+      setError(formatError(e));
+      return;
+    }
+    if (amountBase <= 0n) return;
+    const program = getProgram(connection, anchorWallet);
+    await withTx("Withdraw treasury", async () => {
+      const tx = new Transaction();
+      const adminAta = getAssociatedTokenAddressSync(config.xntMint, publicKey);
+      const ataInfo = await connection.getAccountInfo(adminAta, "confirmed");
+      if (!ataInfo) {
+        tx.add(
+          createAssociatedTokenAccountIdempotentInstruction(
+            publicKey,
+            adminAta,
+            publicKey,
+            config.xntMint,
+            TOKEN_PROGRAM_ID,
+            ASSOCIATED_TOKEN_PROGRAM_ID
+          )
+        );
+      }
+      const instruction = await program.methods
+        .adminWithdrawTreasury(new BN(amountBase.toString()))
+        .accounts({
+          admin: publicKey,
+          config: deriveConfigPda(),
+          vaultAuthority: deriveVaultPda(),
+          treasuryVault: config.treasuryVault,
+          adminXntAta: adminAta,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .instruction();
+      tx.add(instruction);
+      return await program.provider.sendAndConfirm(tx, []);
+    });
+  };
+
   return (
     <div className="min-h-screen bg-ink text-white">
       <TopBar title="Mining V2 Admin" subtitle="Protocol controls" link={{ href: "/", label: "Dashboard" }} />
@@ -301,6 +346,18 @@ export function AdminDashboard() {
             <Input value={rewardTopUpUi} onChange={setRewardTopUpUi} />
             <Button className="mt-4" onClick={() => void onFundRewardVault()} disabled={!isAdmin || busy != null}>
               {busy === "Fund reward vault" ? "Submitting..." : "Top up reward vault"}
+            </Button>
+          </Card>
+
+          <Card className="p-4">
+            <div className="text-sm font-semibold">Withdraw from treasury</div>
+            <div className="mt-2 text-xs text-zinc-400">
+              Transfer XNT from the treasury vault to the admin wallet.
+            </div>
+            <div className="mt-3 text-xs text-zinc-400">Amount (XNT)</div>
+            <Input value={treasuryWithdrawUi} onChange={setTreasuryWithdrawUi} />
+            <Button className="mt-4" onClick={() => void onWithdrawTreasury()} disabled={!isAdmin || busy != null}>
+              {busy === "Withdraw treasury" ? "Submitting..." : "Withdraw to admin wallet"}
             </Button>
           </Card>
 
