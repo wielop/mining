@@ -237,6 +237,25 @@ export function PublicDashboard() {
   }, [refresh]);
 
   useEffect(() => {
+    if (!publicKey || typeof window === "undefined") {
+      setLastClaimAmount(null);
+      return;
+    }
+    const key = `mining_v2_last_claim_${publicKey.toBase58()}`;
+    const raw = window.localStorage.getItem(key);
+    if (!raw) {
+      setLastClaimAmount(null);
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw) as { amount: string };
+      setLastClaimAmount(BigInt(parsed.amount));
+    } catch {
+      setLastClaimAmount(null);
+    }
+  }, [publicKey]);
+
+  useEffect(() => {
     const id = window.setInterval(
       () => setNowTs((prev) => (prev != null ? prev + 1 : prev)),
       1_000
@@ -622,6 +641,10 @@ export function PublicDashboard() {
       const delta = after > before ? after - before : 0n;
       if (delta > 0n) {
         setLastClaimAmount(delta);
+        if (typeof window !== "undefined") {
+          const key = `mining_v2_last_claim_${publicKey.toBase58()}`;
+          window.localStorage.setItem(key, JSON.stringify({ amount: delta.toString() }));
+        }
       }
     }
   }, [config, connection, onClaimAll, publicKey]);
