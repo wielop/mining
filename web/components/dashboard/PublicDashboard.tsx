@@ -506,6 +506,8 @@ export function PublicDashboard() {
     mintDecimals && lastClaimAmount != null
       ? formatRoundedToken(lastClaimAmount, mintDecimals.mind)
       : null;
+  const showLastClaim = lastClaimAmount != null && lastClaimAmount > 0n;
+  const showClaimableAmount = mintDecimals != null && !claimableIsTiny && totalPendingMind > 0n;
 
   const ensureAta = async (owner: PublicKey, mint: PublicKey) => {
     const ata = getAssociatedTokenAddressSync(mint, owner);
@@ -798,21 +800,33 @@ export function PublicDashboard() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Card className="lg:col-span-2 border border-emerald-500/30 bg-emerald-500/5 p-4">
               <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Claimable MIND</div>
-              <div className="mt-3 flex items-baseline gap-1">
-                <button
-                  type="button"
-                  onClick={() => setShowClaimableFull((prev) => !prev)}
-                  title={
-                    mintDecimals
-                      ? `Click for full precision (${claimableFull} MIND)`
-                      : "Connect wallet to see amount"
-                  }
-                  className="text-4xl font-semibold text-emerald-300 transition hover:text-emerald-100 focus:outline-none"
-                >
-                  {mintDecimals ? (showClaimableFull ? claimableFull : claimableRounded) : "-"}
-                </button>
-                <span className="text-lg text-emerald-200">MIND</span>
-              </div>
+              {showLastClaim ? (
+                <div className="mt-3">
+                  <div className="text-[11px] uppercase tracking-[0.2em] text-emerald-200">
+                    Last claimed
+                  </div>
+                  <div className="mt-2 text-4xl font-semibold text-emerald-200">
+                    {lastClaimRounded} MIND
+                  </div>
+                </div>
+              ) : null}
+              {showClaimableAmount ? (
+                <div className="mt-3 flex items-baseline gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowClaimableFull((prev) => !prev)}
+                    title={
+                      mintDecimals
+                        ? `Click for full precision (${claimableFull} MIND)`
+                        : "Connect wallet to see amount"
+                    }
+                    className="text-3xl font-semibold text-emerald-300 transition hover:text-emerald-100 focus:outline-none"
+                  >
+                    {mintDecimals ? (showClaimableFull ? claimableFull : claimableRounded) : "-"}
+                  </button>
+                  <span className="text-lg text-emerald-200">MIND</span>
+                </div>
+              ) : null}
               <div className="mt-2 text-xs text-zinc-400">{claimableHint}</div>
               {networkHp === 0n ? (
                 <div className="mt-2 text-[11px] text-amber-200">
@@ -821,11 +835,6 @@ export function PublicDashboard() {
               ) : estUserPerDay > 0n && mintDecimals ? (
                 <div className="mt-2 text-[11px] text-zinc-500">
                   Accruing now: {accrualPerSecValue}
-                </div>
-              ) : null}
-              {lastClaimRounded ? (
-                <div className="mt-1 text-[11px] text-emerald-200">
-                  Last claimed: {lastClaimRounded} MIND
                 </div>
               ) : null}
             </Card>
