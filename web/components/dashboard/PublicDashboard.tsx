@@ -18,6 +18,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { TopBar } from "@/components/shared/TopBar";
 import { useToast } from "@/components/shared/ToastProvider";
+import { Dialog } from "@/components/ui/dialog";
 import { getProgram } from "@/lib/anchor";
 import type { DecodedConfig } from "@/lib/solana";
 import {
@@ -101,6 +102,11 @@ export function PublicDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [lastClaimAmount, setLastClaimAmount] = useState<bigint | null>(null);
+  const [stopDialogOpen, setStopDialogOpen] = useState(false);
+  const [stopDialogTarget, setStopDialogTarget] = useState<{
+    pubkey: string;
+    owner: Uint8Array;
+  } | null>(null);
   const hashpowerTooltip =
     "Hashpower gives you a share of daily emission. Your share changes if the network hashpower changes.";
   const [showShareFull, setShowShareFull] = useState(false);
@@ -256,6 +262,8 @@ export function PublicDashboard() {
       ? "Status: Mining active • • •"
       : "Status: Emission paused — no active hashpower";
   const statusAccentClass = networkHp > 0n ? "text-emerald-300" : "text-amber-300";
+  const expiryTooltip =
+    "When the contract expires, this rig stops mining automatically and no more rewards are generated.";
   const soonestContractExpiresIn = useMemo(() => {
     if (nowTs == null) return null;
     const activeRemains = positions
@@ -607,6 +615,23 @@ export function PublicDashboard() {
       return sig;
     });
   };
+  const requestStopMining = (posPubkey: string, ownerBytes: Uint8Array | null | undefined) => {
+    if (!ownerBytes || ownerBytes.length !== 32) {
+      if (publicKey) {
+        void onDeactivate(posPubkey, publicKey.toBytes());
+      }
+      return;
+    }
+    setStopDialogTarget({ pubkey: posPubkey, owner: ownerBytes });
+    setStopDialogOpen(true);
+  };
+  const confirmStopMining = async () => {
+    if (!stopDialogTarget) return;
+    const target = stopDialogTarget;
+    setStopDialogOpen(false);
+    setStopDialogTarget(null);
+    await onDeactivate(target.pubkey, target.owner);
+  };
 
   const onStake = async () => {
     if (!anchorWallet || !publicKey || !config || !mintDecimals) return;
@@ -885,26 +910,25 @@ export function PublicDashboard() {
                 </button>
               ))}
             </div>
-
-              <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
-                <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Selected</div>
-                <div className="mt-3 space-y-2 text-sm font-medium text-white">
-                  <div>Hashpower: {contract.hp} HP</div>
-                  <div>Duration: {contract.durationDays} days</div>
-                  <div>Cost: {contract.costXnt} XNT</div>
-                </div>
-                <div
-                  className="mt-3 text-xs text-zinc-500"
-                  title={hashpowerTooltip}
-                >
-                  Hashpower gives you a share of daily emission. Your share changes if the network hashpower changes.
-                </div>
-                <div className="mt-4">
-                  <Button size="lg" className="h-12" onClick={() => void onBuy()} disabled={buyDisabled}>
-                    {busy === "Buy contract" ? "Submitting..." : "Activate rig"}
-                  </Button>
-                </div>
+            <div className="mt-2 text-xs text-zinc-500">
+              Choose the plan that fits your strategy. You can start multiple rigs.
+            </div>
+            <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+              <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Selected</div>
+              <div className="mt-3 space-y-2 text-sm font-medium text-white">
+                <div>Hashpower: {contract.hp} HP</div>
+                <div>Duration: {contract.durationDays} days</div>
+                <div>Cost: {contract.costXnt} XNT</div>
               </div>
+              <div className="mt-3 text-xs text-zinc-500" title={hashpowerTooltip}>
+                Hashpower gives you a share of daily emission. Your share changes if the network hashpower changes.
+              </div>
+              <div className="mt-4">
+                <Button size="lg" className="h-12" onClick={() => void onBuy()} disabled={buyDisabled}>
+                  {busy === "Buy contract" ? "Submitting..." : "Start mining"}
+                </Button>
+              </div>
+            </div>
           </Card>
 
           <Card className="border-cyan-400/20 bg-ink/90 p-6">
@@ -944,7 +968,7 @@ export function PublicDashboard() {
                           {expired ? "expired" : "active"}
                         </Badge>
                       </div>
-                      <div className="mt-2 text-xs text-zinc-400">
+                      <div className="mt-2 text-xs text-zinc-400" title={expiryTooltip}>
                         Ends in {remaining == null ? "-" : formatDurationSeconds(remaining)}
                       </div>
                       {mintDecimals ? (
@@ -960,9 +984,9 @@ export function PublicDashboard() {
                       <div className="mt-3 flex flex-wrap gap-2">
                         <Button
                           size="sm"
-                          onClick={() => void onDeactivate(p.pubkey, p.data.owner)}
+                          onClick={() => requestStopMining(p.pubkey, p.data.owner)}
                           disabled={busy != null || !expired}
-                          title="Stops contributing hashpower. You do not lose rewards already accrued."
+                          title="Stops mining for this rig. This action cannot be undone."
                         >
                           Stop mining
                         </Button>
@@ -1080,6 +1104,33 @@ export function PublicDashboard() {
         ) : null}
         {loading ? <div className="mt-4 text-xs text-zinc-500">Refreshing...</div> : null}
       </main>
+      <Dialog
+        open={stopDialogOpen}
+        onOpenChange={(open) => {
+          setStopDialogOpen(open);
+          if (!open) setStopDialogTarget(null);
+        }}
+        title="Stop mining?"
+        description="Stopping early will permanently disable this rig. You will no longer receive rewards from it."
+        footer={
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setStopDialogOpen(false);
+                setStopDialogTarget(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={() => void confirmStopMining()} disabled={busy != null}>
+              Yes — stop mining
+            </Button>
+          </div>
+        }
+      >
+        <div className="text-xs text-zinc-500">This action cannot be undone.</div>
+      </Dialog>
     </div>
   );
 }
