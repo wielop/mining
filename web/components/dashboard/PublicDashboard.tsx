@@ -359,11 +359,61 @@ export function PublicDashboard() {
       : 0n;
 
   const estimatedStakingPerDay = config ? config.stakingRewardRateXntPerSec * 86_400n : 0n;
-  const sevenDayAverageXnt = config ? (config.stakingRewardRateXntPerSec * 604_800n) / 7n : 0n;
+  const userStakingPerDayBase =
+    config && userStake && config.stakingTotalStakedMind > 0n
+      ? (estimatedStakingPerDay * userStake.stakedMind) / config.stakingTotalStakedMind
+      : 0n;
+  const currentPaceBase =
+    userStakingPerDayBase > 0n
+      ? (userStakingPerDayBase * (BPS_DENOMINATOR + BigInt(effectiveBonusBps))) / BPS_DENOMINATOR
+      : userStakingPerDayBase;
+
+  const totalEarnedXnt: bigint | null = null;
+  const earnedSoFarBase = totalEarnedXnt ?? finalPendingXnt;
+  const earnedLabel = totalEarnedXnt != null ? "Earned so far:" : "Accrued (unclaimed):";
+  const earnedSubtext =
+    totalEarnedXnt != null ? "since you started staking" : "Claimable via the Claim XNT button.";
+  const earnedValue =
+    mintDecimals != null
+      ? `${formatRoundedToken(earnedSoFarBase, mintDecimals.xnt, 2)} XNT`
+      : "-";
+  const currentPaceValue =
+    mintDecimals != null
+      ? `${formatRoundedToken(currentPaceBase, mintDecimals.xnt, 2)} XNT/day`
+      : "-";
+
+  const milestoneTargetXnt = 10n;
+  const milestoneTargetBase =
+    mintDecimals != null
+      ? milestoneTargetXnt * 10n ** BigInt(mintDecimals.xnt)
+      : null;
+  const milestoneValue =
+    milestoneTargetBase != null
+      ? `${formatRoundedToken(milestoneTargetBase, mintDecimals.xnt, 2)} XNT`
+      : "-";
+  const milestoneRemainingBase =
+    milestoneTargetBase != null && earnedSoFarBase < milestoneTargetBase
+      ? milestoneTargetBase - earnedSoFarBase
+      : 0n;
+  const milestoneDays =
+    milestoneTargetBase != null && currentPaceBase > 0n && earnedSoFarBase < milestoneTargetBase
+      ? Number(milestoneRemainingBase / currentPaceBase)
+      : null;
+  const milestoneProgressPct =
+    milestoneTargetBase != null && milestoneTargetBase > 0n
+      ? Number((earnedSoFarBase * 10_000n) / milestoneTargetBase) / 100
+      : null;
+  const milestoneProgress =
+    milestoneProgressPct != null ? Math.min(100, Math.max(0, milestoneProgressPct)) : null;
+
   const userStakeRounded =
     mintDecimals && userStake
-      ? formatRoundedToken(userStake.stakedMind, mintDecimals.mind)
+      ? formatRoundedToken(userStake.stakedMind, mintDecimals.mind, 2)
       : "-";
+  const stakeShareRounded = stakingSharePct != null ? `${stakingSharePct.toFixed(2)}%` : "-";
+  const stakeSummary = userStakeRounded === "-" ? "-" : `${userStakeRounded} MIND`;
+  const epochTooltip =
+    epochCountdown != null ? `Next epoch resets in ${formatDurationSeconds(epochCountdown)}` : undefined;
 
   const claimableRounded =
     mintDecimals != null ? formatRoundedToken(totalPendingMind, mintDecimals.mind) : "-";
@@ -919,30 +969,44 @@ export function PublicDashboard() {
           </Card>
 
           <Card className="border-emerald-400/20 bg-ink/90 p-6">
-            <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Pool stats</div>
-            <div className="mt-2 text-2xl font-semibold">Rewards</div>
-            <div className="mt-4 space-y-2 text-xs text-zinc-400">
+            <div className="text-2xl font-semibold" title={epochTooltip}>
+              Rewards (live)
+            </div>
+            <div className="mt-1 text-xs text-zinc-400">Rewards grow continuously — claim anytime.</div>
+            <div className="mt-5 space-y-5">
               <div>
-                Estimated per day:{" "}
-                {mintDecimals
-                  ? `${formatRoundedToken(estimatedStakingPerDay, mintDecimals.xnt)} XNT/day`
-                  : "-"}
+                <div className="text-xs text-zinc-400">{earnedLabel}</div>
+                <div className="mt-1 text-lg font-semibold text-white">{earnedValue}</div>
+                <div className="text-[11px] text-zinc-500">{earnedSubtext}</div>
               </div>
               <div>
-                7-day average:{" "}
-                {mintDecimals
-                  ? `${formatRoundedToken(sevenDayAverageXnt, mintDecimals.xnt)} XNT/day`
-                  : "-"}
+                <div className="text-xs text-zinc-400">Current pace:</div>
+                <div className="mt-1 text-lg font-semibold text-white">{currentPaceValue}</div>
+                <div className="text-[11px] text-zinc-500">based on your current share</div>
               </div>
-              <div>
-                Next epoch resets in: {epochCountdown != null ? formatDurationSeconds(epochCountdown) : "-"}
+              <div title="Estimate only. Depends on your share and can change at any time.">
+                <div className="text-xs text-zinc-400">Next milestone:</div>
+                <div className="mt-1 text-lg font-semibold text-white">
+                  {milestoneValue}
+                  {milestoneDays != null ? ` (≈ ${milestoneDays} days)` : ""}
+                </div>
+                {milestoneProgress != null ? (
+                  <div className="mt-2">
+                    <div className="relative h-4 w-full overflow-hidden rounded-full bg-white/5">
+                      <div
+                        className="h-full rounded-full bg-emerald-400/70"
+                        style={{ width: `${milestoneProgress}%` }}
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center text-[10px] text-zinc-200">
+                        {milestoneProgress.toFixed(2)}% to next milestone
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </div>
-              <div>
-                Your stake: {mintDecimals ? `${userStakeRounded} MIND` : "-"}
-              </div>
-              <div>
-                Your share: {stakingSharePct != null ? `${stakingSharePct.toFixed(2)}%` : "-"}
-              </div>
+            </div>
+            <div className="mt-5 text-xs text-zinc-500">
+              Your stake: {stakeSummary} · Your share: {stakeShareRounded}
             </div>
           </Card>
         </section>
