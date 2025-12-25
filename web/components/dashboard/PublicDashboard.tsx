@@ -133,6 +133,10 @@ export function PublicDashboard() {
       setLastRefreshNowTs(ts);
 
       let useNativeXnt = cfg.xntMint.equals(SystemProgram.programId);
+      const rewardVaultInfo = await connection.getAccountInfo(cfg.stakingRewardVault, "confirmed");
+      if (rewardVaultInfo && !rewardVaultInfo.owner.equals(TOKEN_PROGRAM_ID)) {
+        useNativeXnt = true;
+      }
       const mindMintInfo = await getMint(connection, cfg.mindMint, "confirmed");
       let xntDecimals = XNT_DECIMALS;
       if (!useNativeXnt) {

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAnchorWallet, useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { BN } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
-import { getMint } from "@solana/spl-token";
+import { TOKEN_PROGRAM_ID, getMint } from "@solana/spl-token";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -57,6 +57,10 @@ export function AdminDashboard() {
       const ts = await fetchClockUnixTs(connection);
       setNowTs(ts);
       let useNativeXnt = cfg.xntMint.equals(SystemProgram.programId);
+      const rewardVaultInfo = await connection.getAccountInfo(cfg.stakingRewardVault, "confirmed");
+      if (rewardVaultInfo && !rewardVaultInfo.owner.equals(TOKEN_PROGRAM_ID)) {
+        useNativeXnt = true;
+      }
       const mindMintInfo = await getMint(connection, cfg.mindMint, "confirmed");
       if (!useNativeXnt) {
         try {
