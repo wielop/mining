@@ -250,10 +250,10 @@ export function PublicDashboard() {
   const sharePctFull =
     networkHp > 0n ? Number((effectiveUserHp * 1_000_000n) / networkHp) / 10_000 : 0;
   const shareTooltip =
-    "You receive ~33% of daily emission while this share holds. Share changes when others join/expire.";
+    "You receive rewards continuously based on your current share. Your share may change when others join or expire.";
   const miningStatusText =
     networkHp > 0n
-      ? "Status: Mining active — rewards accrue continuously"
+      ? "Status: Mining active • • •"
       : "Status: Emission paused — no active hashpower";
   const statusAccentClass = networkHp > 0n ? "text-emerald-300" : "text-amber-300";
   const soonestContractExpiresIn = useMemo(() => {
@@ -446,6 +446,27 @@ export function PublicDashboard() {
     mintDecimals != null ? formatRoundedToken(totalPendingMind, mintDecimals.mind) : "-";
   const claimableFull =
     mintDecimals != null ? formatFullPrecisionToken(totalPendingMind, mintDecimals.mind) : "-";
+  const claimableTinyThreshold =
+    mintDecimals != null ? 10n ** BigInt(Math.max(0, mintDecimals.mind - 6)) : null;
+  const claimableIsTiny =
+    claimableTinyThreshold != null ? totalPendingMind < claimableTinyThreshold : false;
+  const claimableHint = claimableIsTiny
+    ? "Building up — rewards accrue continuously."
+    : "Collect rewards via the Claim rewards button in Your rigs.";
+  const accrualPerSecBase =
+    estUserPerDay > 0n ? estUserPerDay / 86_400n : 0n;
+  const accrualPerSecValue =
+    mintDecimals != null
+      ? `${formatTokenAmount(accrualPerSecBase, mintDecimals.mind, 6)} MIND / sec`
+      : "-";
+  const accrualPerHourValue =
+    mintDecimals != null
+      ? `${formatRoundedToken(estUserPerDay / 24n, mintDecimals.mind, 2)} MIND/hour`
+      : "-";
+  const accrualPerMinuteValue =
+    mintDecimals != null
+      ? `${formatRoundedToken(estUserPerDay / 1_440n, mintDecimals.mind, 2)} MIND/min`
+      : "-";
   const walletRounded =
     mintDecimals != null ? formatRoundedToken(mindBalance, mintDecimals.mind) : "-";
   const walletFull =
@@ -729,6 +750,12 @@ export function PublicDashboard() {
                 {config && mintDecimals ? formatRoundedToken(estUserPerDay, mintDecimals.mind) : "-"}
               </div>
               <div className="text-xs text-zinc-500">Pro-rata based on share</div>
+              {estUserPerDay > 0n && mintDecimals ? (
+                <div className="mt-2 space-y-1 text-[11px] text-zinc-500">
+                  <div>≈ {accrualPerHourValue}</div>
+                  <div>≈ {accrualPerMinuteValue}</div>
+                </div>
+              ) : null}
             </Card>
           </div>
 
@@ -750,15 +777,22 @@ export function PublicDashboard() {
                 </button>
                 <span className="text-lg text-emerald-200">MIND</span>
               </div>
-            <div className="mt-2 text-xs text-zinc-400">
-              Collect rewards via the Claim rewards button in Your rigs.
-            </div>
-            {lastClaimRounded ? (
-              <div className="mt-1 text-[11px] text-emerald-200">
-                Last claimed: {lastClaimRounded} MIND
-              </div>
-            ) : null}
-          </Card>
+              <div className="mt-2 text-xs text-zinc-400">{claimableHint}</div>
+              {networkHp === 0n ? (
+                <div className="mt-2 text-[11px] text-amber-200">
+                  Accrual paused — no active miners
+                </div>
+              ) : estUserPerDay > 0n && mintDecimals ? (
+                <div className="mt-2 text-[11px] text-zinc-500">
+                  Accruing now: {accrualPerSecValue}
+                </div>
+              ) : null}
+              {lastClaimRounded ? (
+                <div className="mt-1 text-[11px] text-emerald-200">
+                  Last claimed: {lastClaimRounded} MIND
+                </div>
+              ) : null}
+            </Card>
             <Card className="p-4">
               <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-400">In wallet</div>
               <div className="mt-3 flex items-baseline gap-1">
