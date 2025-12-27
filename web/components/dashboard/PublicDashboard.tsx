@@ -830,6 +830,7 @@ export function PublicDashboard() {
             mindMint: config.mindMint,
             userMindAta: ata,
             tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
           })
           .instruction();
         tx.add(instruction);
