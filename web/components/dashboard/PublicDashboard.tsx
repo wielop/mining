@@ -4,7 +4,7 @@ import "@/lib/polyfillBufferClient";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAnchorWallet, useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { BN } from "@coral-xyz/anchor";
-import { PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
+import { PublicKey, SystemProgram, Transaction, type AccountMeta } from "@solana/web3.js";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
@@ -23,12 +23,14 @@ import { getProgram } from "@/lib/anchor";
 import type { DecodedConfig } from "@/lib/solana";
 import {
   deriveConfigPda,
+  deriveLevelConfigPda,
   derivePositionPda,
   deriveUserProfilePda,
   deriveUserStakePda,
   deriveVaultPda,
   fetchClockUnixTs,
   fetchConfig,
+  fetchLevelConfig,
   getProgramId,
 } from "@/lib/solana";
 import type { DecodedUserStake } from "@/lib/decoders";
@@ -363,19 +365,31 @@ export function PublicDashboard() {
 
   const userLevel = Math.max(userProfile?.level ?? 1, 1);
   const userXp = userProfile?.xp ?? 0n;
+  const lastXpUpdateTs = userProfile?.lastXpUpdateTs ?? 0;
   const levelIdx = Math.min(Math.max(userLevel, 1), LEVEL_CAP) - 1;
   const levelBonusBps = LEVEL_BONUS_BPS[levelIdx] ?? LEVEL_BONUS_BPS[LEVEL_BONUS_BPS.length - 1];
   const nextLevelXp = userLevel < LEVEL_CAP ? LEVEL_THRESHOLDS[userLevel] : null;
   const levelBonusPct = (levelBonusBps / 100).toFixed(1);
   const levelBonusBpsBig = BigInt(levelBonusBps);
+  const xpDisplay = useMemo(() => {
+    if (!nowTs || !userProfile) return userXp;
+    if (lastXpUpdateTs <= 0) return userXp;
+    const deltaSeconds = Math.max(0, nowTs - lastXpUpdateTs);
+    if (deltaSeconds <= 0) return userXp;
+    const baseHp = userProfile.activeHp;
+    const gain = (baseHp * BigInt(deltaSeconds)) / 36_000n;
+    return userXp + gain;
+  }, [nowTs, userProfile, userXp, lastXpUpdateTs]);
   const levelProgressPct =
     nextLevelXp != null && nextLevelXp > 0n
-      ? Math.min(100, Math.max(0, Number((userXp * 10_000n) / nextLevelXp) / 100))
+      ? Math.min(100, Math.max(0, Number((xpDisplay * 10_000n) / nextLevelXp) / 100))
       : 100;
   const hpTooltip =
     levelBonusBps > 0
       ? `Your HP includes a ${levelBonusPct}% level bonus. Leveling only increases your share of rewards, not the global MIND emission.`
       : "Your HP is currently based only on your active rigs. Leveling will add a small bonus on top of this value.";
+  const canLevelUp =
+    userProfile != null && nextLevelXp != null && xpDisplay >= nextLevelXp && userLevel < LEVEL_CAP;
 
   const baseUserHp = useMemo(() => {
     if (userProfile) return userProfile.activeHp;
@@ -702,6 +716,8 @@ export function PublicDashboard() {
         return "unstake_mind";
       case "Claim XNT":
         return "claim_xnt";
+      case "Level up":
+        return "level_up";
       case "Deactivate position":
         return "deactivate_position";
       default:
@@ -943,6 +959,54 @@ export function PublicDashboard() {
     });
   };
 
+  const onLevelUp = async () => {
+    if (busy != null) return;
+    if (!anchorWallet || !publicKey || !config || !userProfile) return;
+    if (!canLevelUp) {
+      setError("Not enough XP for the next level yet.");
+      return;
+    }
+    const activePositions = positions.filter((entry) => !entry.data.deactivated);
+    if (activePositions.length === 0) {
+      setError("No active rigs found for leveling up.");
+      return;
+    }
+    const activeHp = activePositions.reduce((acc, entry) => acc + entry.data.hp, 0n);
+    if (activeHp !== userProfile.activeHp) {
+      setError("Active rig list out of sync. Refresh and try again.");
+      return;
+    }
+    await withTx("Level up", async () => {
+      const levelCfg = await fetchLevelConfig(connection);
+      const { ata, ix } = await ensureAta(publicKey, config.mindMint);
+      const remainingAccounts: AccountMeta[] = activePositions.map((entry) => ({
+        pubkey: new PublicKey(entry.pubkey),
+        isSigner: false,
+        isWritable: true,
+      }));
+      const program = getProgram(connection, anchorWallet);
+      const tx = new Transaction();
+      if (ix) tx.add(ix);
+      const instruction = await program.methods
+        .levelUp()
+        .accounts({
+          owner: publicKey,
+          config: deriveConfigPda(),
+          levelConfig: deriveLevelConfigPda(),
+          userProfile: deriveUserProfilePda(publicKey),
+          ownerMindAta: ata,
+          burnMindVault: levelCfg.mindBurnVault,
+          treasuryMindVault: levelCfg.mindTreasuryVault,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts(remainingAccounts)
+        .instruction();
+      tx.add(instruction);
+      return await program.provider.sendAndConfirm(tx, []);
+    });
+  };
+
   const buyDisabled = !publicKey || !config || Boolean(busy);
   const stakeDisabled =
     !publicKey || !config || !mintDecimals || Boolean(busy) || stakeAmountUi.trim() === "";
@@ -1000,7 +1064,7 @@ export function PublicDashboard() {
               <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Player Level</div>
               <div className="mt-3 text-3xl font-semibold text-white">Level {userLevel}</div>
               <div className="mt-2 text-xs text-zinc-500">
-                XP: {formatIntegerBig(userXp)}
+                XP: {formatIntegerBig(xpDisplay)}
                 {nextLevelXp != null ? ` / ${formatIntegerBig(nextLevelXp)}` : " (max level)"}
               </div>
               <div className="mt-1 text-xs text-zinc-500">Bonus: +{levelBonusPct}% HP</div>
@@ -1020,6 +1084,13 @@ export function PublicDashboard() {
                   <div className="mt-1 text-[10px] text-zinc-500">Progress to next level</div>
                 ) : null}
               </div>
+              {canLevelUp ? (
+                <div className="mt-3">
+                  <Button size="sm" onClick={() => void onLevelUp()}>
+                    Level up
+                  </Button>
+                </div>
+              ) : null}
             </Card>
             <Card className="p-4">
               <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Est. MIND/day</div>
