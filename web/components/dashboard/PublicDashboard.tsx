@@ -65,6 +65,12 @@ function formatIntegerBig(value: bigint) {
   return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 }
 
+function formatFixed1(valueTenths: bigint) {
+  const whole = valueTenths / 10n;
+  const frac = valueTenths % 10n;
+  return `${formatIntegerBig(whole)}.${frac.toString()}`;
+}
+
 function formatRoundedToken(amountBase: bigint, decimals: number, digits = 2) {
   const full = formatTokenAmount(amountBase, decimals, Math.max(decimals, digits));
   const numeric = Number(full);
@@ -372,24 +378,47 @@ export function PublicDashboard() {
   const nextLevelXp = userLevel < LEVEL_CAP ? LEVEL_THRESHOLDS[userLevel] : null;
   const levelBonusPct = (levelBonusBps / 100).toFixed(1);
   const levelBonusBpsBig = BigInt(levelBonusBps);
-  const xpDisplay = useMemo(() => {
-    if (!nowTs || !userProfile) return userXp;
-    if (lastXpUpdateTs <= 0) return userXp;
+  const xpEstimate = useMemo(() => {
+    if (!nowTs || !userProfile) {
+      return { whole: userXp, tenths: userXp * 10n };
+    }
+    if (lastXpUpdateTs <= 0) {
+      return { whole: userXp, tenths: userXp * 10n };
+    }
     const deltaSeconds = Math.max(0, nowTs - lastXpUpdateTs);
-    if (deltaSeconds <= 0) return userXp;
+    if (deltaSeconds <= 0) {
+      return { whole: userXp, tenths: userXp * 10n };
+    }
     const baseHp = userProfile.activeHp;
-    const gain = (baseHp * BigInt(deltaSeconds)) / 36_000n;
-    return userXp + gain;
+    const gainTenths = (baseHp * BigInt(deltaSeconds) * 10n) / 36_000n;
+    const tenths = userXp * 10n + gainTenths;
+    return { whole: tenths / 10n, tenths };
   }, [nowTs, userProfile, userXp, lastXpUpdateTs]);
+  const xpDisplay = xpEstimate.whole;
+  const xpDisplayTenths = xpEstimate.tenths;
+  const xpRemainingTenths =
+    nextLevelXp != null && nextLevelXp > 0n
+      ? nextLevelXp * 10n > xpDisplayTenths
+        ? nextLevelXp * 10n - xpDisplayTenths
+        : 0n
+      : 0n;
   const levelProgressPct =
     nextLevelXp != null && nextLevelXp > 0n
-      ? Math.min(100, Math.max(0, Number((xpDisplay * 10_000n) / nextLevelXp) / 100))
+      ? Math.min(
+          100,
+          Math.max(
+            0,
+            Number((xpDisplayTenths * 10_000n) / (nextLevelXp * 10n)) / 100
+          )
+        )
       : 100;
   const hpTooltip =
     levelBonusBps > 0
       ? `Your HP includes a ${levelBonusPct}% level bonus. Leveling only increases your share of rewards, not the global MIND emission.`
       : "Your HP is currently based only on your active rigs. Leveling will add a small bonus on top of this value.";
   const levelUpCostTokens = userLevel < LEVEL_CAP ? LEVEL_UP_COSTS[userLevel - 1] ?? null : null;
+  const levelUpCostLabel =
+    levelUpCostTokens != null ? `Cost: ${levelUpCostTokens} MIND` : null;
   const levelUpCostBase =
     levelUpCostTokens != null && mintDecimals != null
       ? BigInt(levelUpCostTokens) * 10n ** BigInt(mintDecimals.mind)
@@ -405,9 +434,9 @@ export function PublicDashboard() {
   const levelUpHint = (() => {
     if (!userProfile || userLevel >= LEVEL_CAP) return null;
     if (nextLevelXp == null) return null;
-    if (xpDisplay < nextLevelXp) {
-      const missing = nextLevelXp - xpDisplay;
-      return `Need ${formatIntegerBig(missing)} XP`;
+    if (xpRemainingTenths > 0n) {
+      const costLabel = levelUpCostTokens != null ? `${levelUpCostTokens} MIND` : null;
+      return `Need ${formatFixed1(xpRemainingTenths)} XP${costLabel ? ` · ${costLabel}` : ""}`;
     }
     if (!hasMindForLevelUp && levelUpCostBase != null && mintDecimals != null) {
       const missingMind = levelUpCostBase > mindBalance ? levelUpCostBase - mindBalance : 0n;
@@ -1091,7 +1120,7 @@ export function PublicDashboard() {
               <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Player Level</div>
               <div className="mt-3 text-3xl font-semibold text-white">Level {userLevel}</div>
               <div className="mt-2 text-xs text-zinc-500">
-                XP: {formatIntegerBig(xpDisplay)}
+                XP: {formatFixed1(xpDisplayTenths)}
                 {nextLevelXp != null ? ` / ${formatIntegerBig(nextLevelXp)}` : " (max level)"}
               </div>
               {lastXpUpdateTs <= 0 && userProfile?.activeHp ? (
@@ -1100,6 +1129,9 @@ export function PublicDashboard() {
                 </div>
               ) : null}
               <div className="mt-1 text-xs text-zinc-500">Bonus: +{levelBonusPct}% HP</div>
+              {levelUpCostLabel ? (
+                <div className="mt-1 text-xs text-zinc-500">{levelUpCostLabel}</div>
+              ) : null}
               <div className="mt-3">
                 <div className="relative h-2 w-full overflow-hidden rounded-full bg-white/5">
                   <div
