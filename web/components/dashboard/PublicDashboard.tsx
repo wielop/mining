@@ -72,12 +72,6 @@ function formatFixed2(valueHundredths: bigint) {
   return `${formatIntegerBig(whole)}.${frac.toString().padStart(2, "0")}`;
 }
 
-function formatFixed1(valueTenths: bigint) {
-  const whole = valueTenths / 10n;
-  const frac = valueTenths % 10n;
-  return `${formatIntegerBig(whole)}.${frac.toString()}`;
-}
-
 function formatRoundedToken(amountBase: bigint, decimals: number, digits = 2) {
   const full = formatTokenAmount(amountBase, decimals, Math.max(decimals, digits));
   const numeric = Number(full);
@@ -537,15 +531,32 @@ export function PublicDashboard() {
     if (cappedBaseUserHp === 0n) return 0n;
     return (cappedBaseUserHp * (BPS_DENOMINATOR + levelBonusBpsBig)) / BPS_DENOMINATOR;
   }, [cappedBaseUserHp, levelBonusBpsBig]);
-  const bonusHpTenths = useMemo(() => {
-    if (cappedBaseUserHp === 0n || levelBonusBpsBig === 0n) return 0n;
-    return (cappedBaseUserHp * levelBonusBpsBig * 10n) / BPS_DENOMINATOR;
+  const effectiveUserHpHundredths = useMemo(() => {
+    if (cappedBaseUserHp === 0n) return 0n;
+    return (
+      cappedBaseUserHp *
+      (BPS_DENOMINATOR + levelBonusBpsBig) *
+      100n /
+      BPS_DENOMINATOR
+    );
   }, [cappedBaseUserHp, levelBonusBpsBig]);
+  const bonusHpHundredths = useMemo(() => {
+    if (effectiveUserHpHundredths === 0n) return 0n;
+    const baseHundredths = cappedBaseUserHp * 100n;
+    return effectiveUserHpHundredths > baseHundredths
+      ? effectiveUserHpHundredths - baseHundredths
+      : 0n;
+  }, [effectiveUserHpHundredths, cappedBaseUserHp]);
 
   const networkHp = config?.networkHpActive ?? 0n;
-  const sharePct = networkHp > 0n ? Number((effectiveUserHp * 10_000n) / networkHp) / 100 : 0;
+  const sharePct =
+    networkHp > 0n
+      ? Number((effectiveUserHpHundredths * 10_000n) / (networkHp * 100n)) / 100
+      : 0;
   const sharePctFull =
-    networkHp > 0n ? Number((effectiveUserHp * 1_000_000n) / networkHp) / 10_000 : 0;
+    networkHp > 0n
+      ? Number((effectiveUserHpHundredths * 1_000_000n) / (networkHp * 100n)) / 10_000
+      : 0;
   const shareTooltip =
     "You receive rewards continuously based on your current share. Your share may change when others join or expire.";
   const miningStatusText =
@@ -631,7 +642,7 @@ export function PublicDashboard() {
   const emissionPerDay = config ? config.emissionPerSec * 86_400n : 0n;
   const estUserPerDay =
     config && networkHp > 0n
-      ? (emissionPerDay * effectiveUserHp) / networkHp
+      ? (emissionPerDay * effectiveUserHpHundredths) / (networkHp * 100n)
       : 0n;
 
   const epochCountdown = useMemo(() => {
@@ -1171,10 +1182,10 @@ export function PublicDashboard() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Card className="p-4">
               <div className="text-3xl font-semibold text-white">
-                <span>{formatIntegerBig(cappedBaseUserHp)}</span>
-                {bonusHpTenths > 0n ? (
+                <span>{formatFixed2(effectiveUserHpHundredths)} HP</span>
+                {bonusHpHundredths > 0n ? (
                   <span className="ml-2 text-base font-semibold text-emerald-300">
-                    (+{formatFixed1(bonusHpTenths)})
+                    (+{formatFixed2(bonusHpHundredths)})
                   </span>
                 ) : null}
               </div>
