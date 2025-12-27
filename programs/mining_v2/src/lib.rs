@@ -377,12 +377,12 @@ pub mod mining_v2 {
             .checked_sub(burn_amount)
             .ok_or(ErrorCode::MathOverflow)?;
         if burn_amount > 0 {
-            token::transfer(
+            token::burn(
                 CpiContext::new(
                     ctx.accounts.token_program.to_account_info(),
-                    Transfer {
+                    Burn {
+                        mint: ctx.accounts.mind_mint.to_account_info(),
                         from: ctx.accounts.owner_mind_ata.to_account_info(),
-                        to: ctx.accounts.burn_mind_vault.to_account_info(),
                         authority: ctx.accounts.owner.to_account_info(),
                     },
                 ),
@@ -970,6 +970,11 @@ pub struct LevelUp<'info> {
         constraint = level_config.mind_mint == config.mind_mint
     )]
     pub level_config: Box<Account<'info, LevelConfig>>,
+    #[account(
+        mut,
+        constraint = mind_mint.key() == config.mind_mint
+    )]
+    pub mind_mint: Account<'info, Mint>,
     #[account(
         mut,
         seeds = [PROFILE_SEED, owner.key().as_ref()],

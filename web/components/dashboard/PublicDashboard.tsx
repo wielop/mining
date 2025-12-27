@@ -1123,6 +1123,7 @@ export function PublicDashboard() {
           owner: publicKey,
           config: deriveConfigPda(),
           levelConfig: deriveLevelConfigPda(),
+          mindMint: config.mindMint,
           userProfile: deriveUserProfilePda(publicKey),
           ownerMindAta: ata,
           burnMindVault: levelCfg.mindBurnVault,
