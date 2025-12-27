@@ -136,6 +136,7 @@ export function PublicDashboard() {
     owner: Uint8Array;
   } | null>(null);
   const refreshIdRef = useRef(0);
+  const xpEstimateStartRef = useRef<number | null>(null);
   const hashpowerTooltip =
     "Hashpower gives you a share of daily emission. Your share changes if the network hashpower changes.";
   const [showShareFull, setShowShareFull] = useState(false);
@@ -371,6 +372,17 @@ export function PublicDashboard() {
     return () => window.clearInterval(id);
   }, [refresh]);
 
+  useEffect(() => {
+    if (!nowTs || !userProfile) return;
+    if (lastXpUpdateTs > 0) {
+      xpEstimateStartRef.current = null;
+      return;
+    }
+    if (userProfile.activeHp > 0 && xpEstimateStartRef.current == null) {
+      xpEstimateStartRef.current = nowTs;
+    }
+  }, [lastXpUpdateTs, nowTs, userProfile]);
+
   const userLevel = Math.max(userProfile?.level ?? 1, 1);
   const userXp = userProfile?.xp ?? 0n;
   const lastXpUpdateTs = userProfile?.lastXpUpdateTs ?? 0;
@@ -383,10 +395,12 @@ export function PublicDashboard() {
     if (!nowTs || !userProfile) {
       return { whole: userXp, tenths: userXp * 10n };
     }
-    if (lastXpUpdateTs <= 0) {
+    const baseline =
+      lastXpUpdateTs > 0 ? lastXpUpdateTs : xpEstimateStartRef.current ?? null;
+    if (!baseline) {
       return { whole: userXp, tenths: userXp * 10n };
     }
-    const deltaSeconds = Math.max(0, nowTs - lastXpUpdateTs);
+    const deltaSeconds = Math.max(0, nowTs - baseline);
     if (deltaSeconds <= 0) {
       return { whole: userXp, tenths: userXp * 10n };
     }
@@ -431,6 +445,7 @@ export function PublicDashboard() {
     hasMindForLevelUp &&
     userLevel < LEVEL_CAP;
   const missingXpLabel = formatFixed1(xpRemainingTenths);
+  const requiredMindLabel = levelUpCostTokens != null ? `${levelUpCostTokens}` : "0";
   const missingMindBase =
     levelUpCostBase != null && levelUpCostBase > mindBalance ? levelUpCostBase - mindBalance : 0n;
   const missingMindLabel =
@@ -443,13 +458,19 @@ export function PublicDashboard() {
     ? "Max level reached"
     : canLevelUp
     ? "Level up"
-    : `Need ${missingXpLabel} XP and ${missingMindLabel} MIND`;
+    : xpRemainingTenths > 0n
+    ? `Need ${missingXpLabel} XP and ${requiredMindLabel} MIND`
+    : `Need ${missingMindLabel} MIND`;
   const xpLine = nextLevelXp != null
     ? `XP: ${formatFixed1(xpDisplayTenths)} / ${formatIntegerBig(nextLevelXp)}`
     : `XP: ${formatFixed1(xpDisplayTenths)} (max level)`;
   const bonusLine = `HP bonus: +${levelBonusPct}%`;
   const progressionDescription =
     "Your account earns XP while your rigs are mining. Higher levels give a small HP bonus on top of your rigs.";
+  const xpEstimateNote =
+    lastXpUpdateTs <= 0 && userProfile?.activeHp
+      ? "XP is estimated until your next on-chain interaction (claim, buy, renew)."
+      : null;
   const levelProgressLabel = `Progress: ${levelProgressPct.toFixed(1)}%`;
 
   const baseUserHp = useMemo(() => {
@@ -1563,7 +1584,7 @@ export function PublicDashboard() {
             level={userLevel}
             xpLine={xpLine}
             bonusLine={bonusLine}
-            description={progressionDescription}
+            description={xpEstimateNote ? `${progressionDescription} ${xpEstimateNote}` : progressionDescription}
             progressLabel={levelProgressLabel}
             progressPct={levelProgressPct}
             maxLevel={maxLevel}
