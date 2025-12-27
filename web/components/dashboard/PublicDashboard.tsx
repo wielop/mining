@@ -51,6 +51,7 @@ const BADGE_BONUS_CAP_BPS = 2_000n;
 const LEVEL_CAP = 6;
 const LEVEL_THRESHOLDS = [0n, 500n, 2_000n, 5_000n, 10_000n, 16_000n] as const;
 const LEVEL_BONUS_BPS = [0, 160, 340, 550, 780, 1000] as const;
+const LEVEL_UP_COSTS = [150, 350, 900, 2_000, 4_000] as const;
 const STAKING_SECONDS_PER_YEAR = 31_536_000;
 const XNT_DECIMALS = 9;
 const NATIVE_VAULT_SPACE = 9;
@@ -388,8 +389,33 @@ export function PublicDashboard() {
     levelBonusBps > 0
       ? `Your HP includes a ${levelBonusPct}% level bonus. Leveling only increases your share of rewards, not the global MIND emission.`
       : "Your HP is currently based only on your active rigs. Leveling will add a small bonus on top of this value.";
+  const levelUpCostTokens = userLevel < LEVEL_CAP ? LEVEL_UP_COSTS[userLevel - 1] ?? null : null;
+  const levelUpCostBase =
+    levelUpCostTokens != null && mintDecimals != null
+      ? BigInt(levelUpCostTokens) * 10n ** BigInt(mintDecimals.mind)
+      : null;
+  const hasMindForLevelUp =
+    levelUpCostBase != null ? mindBalance >= levelUpCostBase : false;
   const canLevelUp =
-    userProfile != null && nextLevelXp != null && xpDisplay >= nextLevelXp && userLevel < LEVEL_CAP;
+    userProfile != null &&
+    nextLevelXp != null &&
+    xpDisplay >= nextLevelXp &&
+    hasMindForLevelUp &&
+    userLevel < LEVEL_CAP;
+  const levelUpHint = (() => {
+    if (!userProfile || userLevel >= LEVEL_CAP) return null;
+    if (nextLevelXp == null) return null;
+    if (xpDisplay < nextLevelXp) {
+      const missing = nextLevelXp - xpDisplay;
+      return `Need ${formatIntegerBig(missing)} XP`;
+    }
+    if (!hasMindForLevelUp && levelUpCostBase != null && mintDecimals != null) {
+      const missingMind = levelUpCostBase > mindBalance ? levelUpCostBase - mindBalance : 0n;
+      return `Need ${formatRoundedToken(missingMind, mintDecimals.mind, 2)} MIND`;
+    }
+    return null;
+  })();
+  const levelUpDisabled = !canLevelUp || busy != null;
 
   const baseUserHp = useMemo(() => {
     if (userProfile) return userProfile.activeHp;
@@ -963,7 +989,7 @@ export function PublicDashboard() {
     if (busy != null) return;
     if (!anchorWallet || !publicKey || !config || !userProfile) return;
     if (!canLevelUp) {
-      setError("Not enough XP for the next level yet.");
+      setError(levelUpHint ?? "Not enough XP for the next level yet.");
       return;
     }
     const activePositions = positions.filter((entry) => !entry.data.deactivated);
@@ -1067,6 +1093,11 @@ export function PublicDashboard() {
                 XP: {formatIntegerBig(xpDisplay)}
                 {nextLevelXp != null ? ` / ${formatIntegerBig(nextLevelXp)}` : " (max level)"}
               </div>
+              {lastXpUpdateTs <= 0 && userProfile?.activeHp ? (
+                <div className="mt-1 text-[10px] text-zinc-500">
+                  XP starts after your next interaction (claim, buy, renew).
+                </div>
+              ) : null}
               <div className="mt-1 text-xs text-zinc-500">Bonus: +{levelBonusPct}% HP</div>
               <div className="mt-3">
                 <div className="relative h-2 w-full overflow-hidden rounded-full bg-white/5">
@@ -1084,13 +1115,14 @@ export function PublicDashboard() {
                   <div className="mt-1 text-[10px] text-zinc-500">Progress to next level</div>
                 ) : null}
               </div>
-              {canLevelUp ? (
-                <div className="mt-3">
-                  <Button size="sm" onClick={() => void onLevelUp()}>
-                    Level up
-                  </Button>
-                </div>
-              ) : null}
+              <div className="mt-3">
+                <Button size="sm" onClick={() => void onLevelUp()} disabled={levelUpDisabled}>
+                  Level up
+                </Button>
+                {levelUpHint ? (
+                  <div className="mt-1 text-[10px] text-zinc-500">{levelUpHint}</div>
+                ) : null}
+              </div>
             </Card>
             <Card className="p-4">
               <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Est. MIND/day</div>
