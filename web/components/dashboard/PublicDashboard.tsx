@@ -72,6 +72,12 @@ function formatFixed2(valueHundredths: bigint) {
   return `${formatIntegerBig(whole)}.${frac.toString().padStart(2, "0")}`;
 }
 
+function formatFixed1(valueTenths: bigint) {
+  const whole = valueTenths / 10n;
+  const frac = valueTenths % 10n;
+  return `${formatIntegerBig(whole)}.${frac.toString()}`;
+}
+
 function formatRoundedToken(amountBase: bigint, decimals: number, digits = 2) {
   const full = formatTokenAmount(amountBase, decimals, Math.max(decimals, digits));
   const numeric = Number(full);
@@ -530,6 +536,10 @@ export function PublicDashboard() {
   const effectiveUserHp = useMemo(() => {
     if (cappedBaseUserHp === 0n) return 0n;
     return (cappedBaseUserHp * (BPS_DENOMINATOR + levelBonusBpsBig)) / BPS_DENOMINATOR;
+  }, [cappedBaseUserHp, levelBonusBpsBig]);
+  const bonusHpTenths = useMemo(() => {
+    if (cappedBaseUserHp === 0n || levelBonusBpsBig === 0n) return 0n;
+    return (cappedBaseUserHp * levelBonusBpsBig * 10n) / BPS_DENOMINATOR;
   }, [cappedBaseUserHp, levelBonusBpsBig]);
 
   const networkHp = config?.networkHpActive ?? 0n;
@@ -1160,7 +1170,14 @@ export function PublicDashboard() {
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Card className="p-4">
-              <div className="text-3xl font-semibold text-white">{formatIntegerBig(effectiveUserHp)}</div>
+              <div className="text-3xl font-semibold text-white">
+                <span>{formatIntegerBig(cappedBaseUserHp)}</span>
+                {bonusHpTenths > 0n ? (
+                  <span className="ml-2 text-base font-semibold text-emerald-300">
+                    (+{formatFixed1(bonusHpTenths)})
+                  </span>
+                ) : null}
+              </div>
               <div className="mt-2 flex items-center justify-between text-[10px] uppercase tracking-[0.2em] text-zinc-400">
                 <span>Your HP</span>
                 <span
