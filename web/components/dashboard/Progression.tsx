@@ -1,7 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { Card } from "@/components/ui/card";
 import { TopBar } from "@/components/shared/TopBar";
+import { deriveUserProfilePda } from "@/lib/solana";
+import { decodeUserMiningProfileAccount } from "@/lib/decoders";
 
 const LEVEL_ROWS = [
   { level: "Level 1", xp: "0 XP", bonus: "0.0%", cost: "-" },
@@ -13,9 +17,38 @@ const LEVEL_ROWS = [
 ] as const;
 
 export function Progression() {
+  const { connection } = useConnection();
+  const { publicKey } = useWallet();
+  const [userLevel, setUserLevel] = useState(1);
+
+  useEffect(() => {
+    let active = true;
+    if (!publicKey) {
+      setUserLevel(1);
+      return undefined;
+    }
+    void (async () => {
+      try {
+        const info = await connection.getAccountInfo(deriveUserProfilePda(publicKey), "confirmed");
+        if (!active) return;
+        if (!info) {
+          setUserLevel(1);
+          return;
+        }
+        const decoded = decodeUserMiningProfileAccount(info.data);
+        setUserLevel(Math.max(decoded.level ?? 1, 1));
+      } catch {
+        if (active) setUserLevel(1);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [connection, publicKey]);
+
   return (
     <div className="min-h-screen bg-ink text-white">
-      <TopBar />
+      <TopBar progressionLabel={`LVL ${userLevel}`} />
 
       <main className="mx-auto max-w-5xl px-4 pb-20 pt-10">
         <div className="space-y-4">

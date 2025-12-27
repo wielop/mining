@@ -14,6 +14,7 @@ export function AccountProgressionPanel({
   maxLevel,
   buttonLabel,
   buttonDisabled,
+  requirements,
   onLevelUp,
 }: {
   level: number;
@@ -26,6 +27,7 @@ export function AccountProgressionPanel({
   maxLevel: boolean;
   buttonLabel: string;
   buttonDisabled: boolean;
+  requirements?: { xp: string; cost: string } | null;
   onLevelUp: () => void;
 }) {
   return (
@@ -56,6 +58,15 @@ export function AccountProgressionPanel({
             <Button size="sm" onClick={onLevelUp} disabled={buttonDisabled}>
               {buttonLabel}
             </Button>
+            {requirements ? (
+              <div className="mt-3 text-xs text-zinc-400">
+                <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+                  Requirements
+                </div>
+                <div className="mt-1 text-sm text-zinc-200">XP: {requirements.xp}</div>
+                <div className="text-sm text-zinc-200">Cost: {requirements.cost} MIND</div>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>

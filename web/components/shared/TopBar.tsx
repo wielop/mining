@@ -13,12 +13,14 @@ export function TopBar({
   tier,
   xpProgress,
   xpNextLabel,
+  progressionLabel,
   className,
 }: {
   link?: { href: string; label: string };
   tier?: "Bronze" | "Silver" | "Gold" | "Diamond";
   xpProgress?: number | null;
   xpNextLabel?: string | null;
+  progressionLabel?: string;
   className?: string;
 }) {
   const pathname = usePathname();
@@ -60,7 +62,7 @@ export function TopBar({
                 : "border-cyan-400/20 bg-ink/70 text-zinc-300 hover:border-cyan-300/40 hover:bg-ink/90"
             )}
           >
-            Progression
+            {progressionLabel ?? "Progression"}
           </Link>
           <Link
             href="https://t.me/+ME_vsXeLLcMyMmE0"

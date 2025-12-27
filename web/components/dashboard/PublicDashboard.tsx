@@ -481,21 +481,20 @@ export function PublicDashboard() {
     userLevel < LEVEL_CAP;
   const missingXpLabel = formatFixed2(xpRemainingHundredths);
   const requiredMindLabel = levelUpCostTokens != null ? `${levelUpCostTokens}` : "0";
-  const missingMindBase =
-    levelUpCostBase != null && levelUpCostBase > mindBalance ? levelUpCostBase - mindBalance : 0n;
-  const missingMindLabel =
-    mintDecimals != null
-      ? formatRoundedToken(missingMindBase, mintDecimals.mind, 2)
-      : missingMindBase.toString();
   const maxLevel = userLevel >= LEVEL_CAP || nextLevelXp == null;
   const levelUpDisabled = !canLevelUp || busy != null || maxLevel;
   const levelUpButtonLabel = maxLevel
     ? "Max level reached"
     : canLevelUp
     ? "Level up"
-    : xpRemainingHundredths > 0n
-    ? `Need ${missingXpLabel} XP and ${requiredMindLabel} MIND`
-    : `Need ${missingMindLabel} MIND`;
+    : "Requirements";
+  const levelUpRequirements =
+    !canLevelUp && !maxLevel
+      ? {
+          xp: missingXpLabel,
+          cost: requiredMindLabel,
+        }
+      : null;
   const xpLine = nextLevelXp != null
     ? `XP: ${formatFixed2(xpDisplayHundredths)} / ${formatIntegerBig(nextLevelXp)}`
     : `XP: ${formatFixed2(xpDisplayHundredths)} (max level)`;
@@ -1169,7 +1168,7 @@ export function PublicDashboard() {
 
   return (
     <div className="min-h-screen bg-ink text-white">
-      <TopBar />
+      <TopBar progressionLabel={`LVL ${userLevel}`} />
 
       <main className="mx-auto max-w-6xl px-4 pb-24 pt-10">
         <div className="space-y-4">
@@ -1670,6 +1669,7 @@ export function PublicDashboard() {
             maxLevel={maxLevel}
             buttonLabel={levelUpButtonLabel}
             buttonDisabled={levelUpDisabled}
+            requirements={levelUpRequirements}
             onLevelUp={onLevelUp}
           />
         </section>
