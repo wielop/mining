@@ -1,9 +1,10 @@
 import * as anchor from "@coral-xyz/anchor";
 import { TOKEN_PROGRAM_ID, createAccount, createMint } from "@solana/spl-token";
-import { Keypair, SystemProgram, Transaction } from "@solana/web3.js";
+import { Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import dotenv from "dotenv";
 import {
   deriveConfigPda,
+  deriveLevelConfigPda,
   deriveStakingRewardVaultPda,
   deriveTreasuryVaultPda,
   deriveVaultPda,
@@ -33,6 +34,7 @@ const main = async () => {
   const connection = provider.connection;
 
   const configPda = deriveConfigPda();
+  const levelConfigPda = deriveLevelConfigPda();
   const vaultAuthority = deriveVaultPda();
   const stakingRewardVault = deriveStakingRewardVaultPda();
   const treasuryVault = deriveTreasuryVaultPda();
@@ -119,6 +121,43 @@ const main = async () => {
     throw new Error("Failed to load config after initialization.");
   }
 
+  const levelConfigInfo = await connection.getAccountInfo(levelConfigPda, "confirmed");
+  if (!levelConfigInfo) {
+    const burnVaultEnv = process.env.MIND_BURN_VAULT;
+    const treasuryVaultEnv = process.env.MIND_TREASURY_VAULT;
+    const mindBurnVault = burnVaultEnv
+      ? new PublicKey(burnVaultEnv)
+      : await createAccount(
+          connection,
+          wallet.payer,
+          cfg.mindMint,
+          wallet.publicKey,
+          Keypair.generate()
+        );
+    const mindTreasuryVault = treasuryVaultEnv
+      ? new PublicKey(treasuryVaultEnv)
+      : await createAccount(
+          connection,
+          wallet.payer,
+          cfg.mindMint,
+          wallet.publicKey,
+          Keypair.generate()
+        );
+
+    await program.methods
+      .initLevelConfig()
+      .accounts({
+        admin: wallet.publicKey,
+        config: configPda,
+        levelConfig: levelConfigPda,
+        mindMint: cfg.mindMint,
+        mindBurnVault,
+        mindTreasuryVault,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+  }
+
   const seedStaking = parseBigInt(
     process.env.SEED_STAKING_XNT_BASE,
     toBaseUnits(1n, XNT_DECIMALS)
@@ -163,6 +202,7 @@ const main = async () => {
   console.log("stakingRewardVault:", cfg.stakingRewardVault.toBase58());
   console.log("treasuryVault:", cfg.treasuryVault.toBase58());
   console.log("stakingMindVault:", cfg.stakingMindVault.toBase58());
+  console.log("levelConfig:", levelConfigPda.toBase58());
 };
 
 main().catch((err) => {

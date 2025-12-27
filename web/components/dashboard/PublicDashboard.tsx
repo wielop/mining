@@ -1090,6 +1090,13 @@ export function PublicDashboard() {
       setError("Not enough XP or MIND to level up yet.");
       return;
     }
+    let levelCfg: Awaited<ReturnType<typeof fetchLevelConfig>>;
+    try {
+      levelCfg = await fetchLevelConfig(connection);
+    } catch {
+      setError("Leveling is not available yet. Ask an admin to initialize level config.");
+      return;
+    }
     const activePositions = positions.filter((entry) => !entry.data.deactivated);
     if (activePositions.length === 0) {
       setError("No active rigs found for leveling up.");
@@ -1101,7 +1108,6 @@ export function PublicDashboard() {
       return;
     }
     await withTx("Level up", async () => {
-      const levelCfg = await fetchLevelConfig(connection);
       const { ata, ix } = await ensureAta(publicKey, config.mindMint);
       const remainingAccounts: AccountMeta[] = activePositions.map((entry) => ({
         pubkey: new PublicKey(entry.pubkey),
