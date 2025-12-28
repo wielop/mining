@@ -1260,11 +1260,8 @@ describe("mining_v2", () => {
 
     const rewardBase = STARTER_HP.mul(MIND_PER_HP_PER_DAY).mul(new BN(7)).div(HP_SCALE);
     const buffCost = rewardBase.mul(new BN(150)).div(new BN(10_000));
-    const burnExpected = buffCost.div(new BN(2));
-    const treasuryExpected = buffCost.sub(burnExpected);
-
-    expect(burnAfter.sub(burnBefore).toString()).to.eq(burnExpected.toString());
-    expect(treasuryAfter.sub(treasuryBefore).toString()).to.eq(treasuryExpected.toString());
+    expect(burnAfter.sub(burnBefore).toString()).to.eq(buffCost.toString());
+    expect(treasuryAfter.sub(treasuryBefore).toString()).to.eq("0");
   });
 
   it("allows early renewal within window and defers buff to next cycle", async () => {

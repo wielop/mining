@@ -559,38 +559,17 @@ pub mod mining_v2 {
         );
 
         if buff_cost_u64 > 0 {
-            let burn_amount = buff_cost_u64
-                .checked_div(2)
-                .ok_or(ErrorCode::MathOverflow)?;
-            let treasury_amount = buff_cost_u64
-                .checked_sub(burn_amount)
-                .ok_or(ErrorCode::MathOverflow)?;
-            if burn_amount > 0 {
-                token::burn(
-                    CpiContext::new(
-                        ctx.accounts.token_program.to_account_info(),
-                        Burn {
-                            mint: ctx.accounts.mind_mint.to_account_info(),
-                            from: ctx.accounts.owner_mind_ata.to_account_info(),
-                            authority: ctx.accounts.owner.to_account_info(),
-                        },
-                    ),
-                    burn_amount,
-                )?;
-            }
-            if treasury_amount > 0 {
-                token::transfer(
-                    CpiContext::new(
-                        ctx.accounts.token_program.to_account_info(),
-                        Transfer {
-                            from: ctx.accounts.owner_mind_ata.to_account_info(),
-                            to: ctx.accounts.treasury_mind_vault.to_account_info(),
-                            authority: ctx.accounts.owner.to_account_info(),
-                        },
-                    ),
-                    treasury_amount,
-                )?;
-            }
+            token::burn(
+                CpiContext::new(
+                    ctx.accounts.token_program.to_account_info(),
+                    Burn {
+                        mint: ctx.accounts.mind_mint.to_account_info(),
+                        from: ctx.accounts.owner_mind_ata.to_account_info(),
+                        authority: ctx.accounts.owner.to_account_info(),
+                    },
+                ),
+                buff_cost_u64,
+            )?;
         }
 
         ensure_position_v2(

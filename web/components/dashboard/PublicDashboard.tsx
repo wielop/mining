@@ -1863,7 +1863,7 @@ export function PublicDashboard() {
                             </Button>
                             <div className="text-[11px] text-zinc-500">
                               Buff increases this rig&apos;s HP for the next cycle. Cost:{" "}
-                              {buffCostLabel} MIND (burn + treasury).
+                              {buffCostLabel} MIND (burned).
                             </div>
                           </div>
                         </div>
