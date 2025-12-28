@@ -5,6 +5,7 @@ export const DEFAULT_PROGRAM_ID = "uaDkkJGLLEY3kFMhhvrh5MZJ6fmwCmhNf8L7BZQJ9Aw";
 
 const CONFIG_SEED = "config";
 const LEVEL_CONFIG_SEED = "level_config";
+const RIG_BUFF_CONFIG_SEED = "rig_buff";
 const VAULT_SEED = "vault";
 const STAKING_REWARD_VAULT_SEED = "staking_reward_vault";
 const TREASURY_VAULT_SEED = "treasury_vault";
@@ -124,6 +125,9 @@ export const deriveConfigPda = () =>
 export const deriveLevelConfigPda = () =>
   PublicKey.findProgramAddressSync([Buffer.from(LEVEL_CONFIG_SEED)], getProgramId())[0];
 
+export const deriveRigBuffConfigPda = () =>
+  PublicKey.findProgramAddressSync([Buffer.from(RIG_BUFF_CONFIG_SEED)], getProgramId())[0];
+
 export const deriveVaultPda = () =>
   PublicKey.findProgramAddressSync([Buffer.from(VAULT_SEED)], getProgramId())[0];
 
@@ -177,6 +181,15 @@ export type DecodedLevelConfig = {
   mindMint: PublicKey;
   mindBurnVault: PublicKey;
   mindTreasuryVault: PublicKey;
+  bump: number;
+};
+
+export type DecodedRigBuffConfig = {
+  admin: PublicKey;
+  mindMint: PublicKey;
+  mindBurnVault: PublicKey;
+  mindTreasuryVault: PublicKey;
+  mindPerHpPerDay: bigint;
   bump: number;
 };
 
@@ -311,4 +324,30 @@ export async function fetchLevelConfig(connection: Connection): Promise<DecodedL
   offset += 32;
   const bump = data.readUInt8(offset);
   return { admin, mindMint, mindBurnVault, mindTreasuryVault, bump };
+}
+
+export async function fetchRigBuffConfig(connection: Connection): Promise<DecodedRigBuffConfig> {
+  const rigBuffConfigPda = deriveRigBuffConfigPda();
+  const info = await connection.getAccountInfo(rigBuffConfigPda, "confirmed");
+  if (!info) {
+    throw new Error(`Rig buff config not found: ${rigBuffConfigPda.toBase58()}`);
+  }
+  const data = info.data;
+  const minSize = 8 + 32 * 4 + 8 + 1;
+  if (data.length < minSize) {
+    throw new Error(`Rig buff config too small: ${data.length} bytes`);
+  }
+  let offset = 8;
+  const admin = new PublicKey(data.subarray(offset, offset + 32));
+  offset += 32;
+  const mindMint = new PublicKey(data.subarray(offset, offset + 32));
+  offset += 32;
+  const mindBurnVault = new PublicKey(data.subarray(offset, offset + 32));
+  offset += 32;
+  const mindTreasuryVault = new PublicKey(data.subarray(offset, offset + 32));
+  offset += 32;
+  const mindPerHpPerDay = data.readBigUInt64LE(offset);
+  offset += 8;
+  const bump = data.readUInt8(offset);
+  return { admin, mindMint, mindBurnVault, mindTreasuryVault, mindPerHpPerDay, bump };
 }

@@ -19,12 +19,12 @@ import { Input } from "@/components/ui/input";
 import { TopBar } from "@/components/shared/TopBar";
 import { AccountProgressionPanel } from "@/components/dashboard/AccountProgressionPanel";
 import { useToast } from "@/components/shared/ToastProvider";
-import { Dialog } from "@/components/ui/dialog";
 import { getProgram } from "@/lib/anchor";
-import type { DecodedConfig } from "@/lib/solana";
+import type { DecodedConfig, DecodedRigBuffConfig } from "@/lib/solana";
 import {
   deriveConfigPda,
   deriveLevelConfigPda,
+  deriveRigBuffConfigPda,
   derivePositionPda,
   deriveUserProfilePda,
   deriveUserStakePda,
@@ -32,6 +32,7 @@ import {
   fetchClockUnixTs,
   fetchConfig,
   fetchLevelConfig,
+  fetchRigBuffConfig,
   getProgramId,
 } from "@/lib/solana";
 import type { DecodedUserStake } from "@/lib/decoders";
@@ -57,6 +58,8 @@ import {
 const ACC_SCALE = 1_000_000_000_000_000_000n;
 const AUTO_CLAIM_INTERVAL_MS = 15_000;
 const BPS_DENOMINATOR = 10_000n;
+const RIG_BUFF_COST_BPS = 150n;
+const RIG_BUFF_CAP_BPS = 850n;
 const RIPPER_FEE_BPS = 20n;
 const BADGE_BONUS_CAP_BPS = 2_000n;
 const LEVEL_CAP = 6;
@@ -67,6 +70,8 @@ const STAKING_SECONDS_PER_YEAR = 31_536_000;
 const XNT_DECIMALS = 9;
 const NATIVE_VAULT_SPACE = 9;
 const HP_SCALE = 100n;
+const GRACE_DAYS = 2;
+const RENEW_REMINDER_DAYS = 3;
 const CONTRACTS = [
   { key: 0, label: "Starter Rig", durationDays: 7, costXnt: 1, hp: 0.6 },
   { key: 1, label: "Pro Rig", durationDays: 14, costXnt: 8, hp: 7 },
@@ -157,6 +162,7 @@ export function PublicDashboard() {
   >(null);
   const [userStake, setUserStake] = useState<DecodedUserStake | null>(null);
   const [mintDecimals, setMintDecimals] = useState<{ xnt: number; mind: number } | null>(null);
+  const [rigBuffConfig, setRigBuffConfig] = useState<DecodedRigBuffConfig | null>(null);
   const [ripperPool, setRipperPool] = useState<RipperStakePool | null>(null);
   const [ripperMintDecimals, setRipperMintDecimals] = useState<number | null>(null);
   const [xntBalance, setXntBalance] = useState<bigint>(0n);
@@ -176,11 +182,6 @@ export function PublicDashboard() {
   const [loading, setLoading] = useState<boolean>(false);
   const [lastClaimAmount, setLastClaimAmount] = useState<bigint | null>(null);
   const [lastClaimTs, setLastClaimTs] = useState<number | null>(null);
-  const [stopDialogOpen, setStopDialogOpen] = useState(false);
-  const [stopDialogTarget, setStopDialogTarget] = useState<{
-    pubkey: string;
-    owner: Uint8Array;
-  } | null>(null);
   const refreshIdRef = useRef(0);
   const xpEstimateStartRef = useRef<number | null>(null);
   const xpEstimateKey =
@@ -215,6 +216,15 @@ export function PublicDashboard() {
       const cfg = await fetchConfig(connection);
       if (isStale()) return;
       setConfig(cfg);
+      try {
+        const buffCfg = await fetchRigBuffConfig(connection);
+        if (isStale()) return;
+        setRigBuffConfig(buffCfg);
+      } catch (err) {
+        console.warn("Rig buff config unavailable", err);
+        if (isStale()) return;
+        setRigBuffConfig(null);
+      }
       const ts = await fetchClockUnixTs(connection);
       if (isStale()) return;
       setNowTs(ts);
@@ -661,8 +671,11 @@ export function PublicDashboard() {
       ? "Status: Mining active • • •"
       : "Status: Emission paused — no active hashpower";
   const statusAccentClass = networkHp > 0n ? "text-emerald-300" : "text-amber-300";
+  const secondsPerDayUi = config && Number(config.secondsPerDay) > 0 ? Number(config.secondsPerDay) : 86_400;
+  const graceSeconds = secondsPerDayUi * GRACE_DAYS;
+  const renewWindowSeconds = secondsPerDayUi * RENEW_REMINDER_DAYS;
   const expiryTooltip =
-    "When the contract expires, this rig stops mining automatically and no more rewards are generated.";
+    "When the contract expires, the rig stops mining and enters a 2-day grace period for renewal.";
   const soonestContractExpiresIn = useMemo(() => {
     if (nowTs == null) return null;
     const activeRemains = positions
@@ -717,6 +730,36 @@ export function PublicDashboard() {
       return { position: p, pending, livePending };
     });
   }, [positions, config, extraAccSinceRefresh, levelBonusBpsBig, nowTs]);
+
+  const rigBuffCapReached = useMemo(() => {
+    if (!nowTs) return false;
+    let baseTotal = 0n;
+    let buffedTotal = 0n;
+    for (const entry of positions) {
+      if (entry.data.deactivated || nowTs >= entry.data.endTs) continue;
+      const rigType = entry.data.hpScaled
+        ? entry.data.rigType
+        : rigTypeFromDuration(entry.data.startTs, entry.data.endTs, secondsPerDayUi);
+      const buffBpsBase = rigBuffBps(rigType, entry.data.buffLevel);
+      const buffApplied =
+        entry.data.buffLevel > 0 &&
+        (entry.data.buffAppliedFromCycle === 0n ||
+          BigInt(nowTs) >= entry.data.buffAppliedFromCycle);
+      const buffBps = buffApplied ? BigInt(buffBpsBase) : 0n;
+      const baseHp = entry.data.hp;
+      baseTotal += baseHp;
+      const buffedHp = (baseHp * (BPS_DENOMINATOR + buffBps)) / BPS_DENOMINATOR;
+      buffedTotal += buffedHp;
+    }
+    if (baseTotal === 0n) return false;
+    const bonusBps = ((buffedTotal - baseTotal) * BPS_DENOMINATOR) / baseTotal;
+    return bonusBps >= RIG_BUFF_CAP_BPS;
+  }, [nowTs, positions, secondsPerDayUi]);
+
+  const visiblePositions = useMemo(() => {
+    if (nowTs == null) return pendingPositions;
+    return pendingPositions.filter((entry) => nowTs <= entry.position.data.endTs + graceSeconds);
+  }, [graceSeconds, nowTs, pendingPositions]);
 
   const totalPendingMind = pendingPositions.reduce((acc, entry) => acc + entry.pending, 0n);
   const livePendingMind =
@@ -995,8 +1038,10 @@ export function PublicDashboard() {
         return "claim_xnt_rxnt";
       case "Level up":
         return "level_up";
-      case "Deactivate position":
-        return "deactivate_position";
+      case "Renew rig":
+        return "renew_rig";
+      case "Renew with buff":
+        return "renew_rig_with_buff";
       default:
         return "other";
     }
@@ -1119,39 +1164,70 @@ export function PublicDashboard() {
       }
     }
   }, [config, connection, nowTs, onClaimAll, publicKey]);
-  const onDeactivate = async (posPubkey: string, ownerBytes: Uint8Array) => {
+  const onRenew = async (posPubkey: string) => {
+    if (busy != null) return;
     if (!anchorWallet || !config || !publicKey) return;
     const program = getProgram(connection, anchorWallet);
-    await withTx("Deactivate position", async () => {
+    await withTx("Renew rig", async () => {
       const sig = await program.methods
-        .deactivatePosition()
+        .renewRig()
         .accounts({
           owner: publicKey,
           config: deriveConfigPda(),
+          userProfile: deriveUserProfilePda(publicKey),
           position: new PublicKey(posPubkey),
-          userProfile: deriveUserProfilePda(new PublicKey(ownerBytes)),
+          stakingRewardVault: config.stakingRewardVault,
+          treasuryVault: config.treasuryVault,
           systemProgram: SystemProgram.programId,
         })
         .rpc();
       return sig;
     });
   };
-  const requestStopMining = (posPubkey: string, ownerBytes: Uint8Array | null | undefined) => {
-    if (!ownerBytes || ownerBytes.length !== 32) {
-      if (publicKey) {
-        void onDeactivate(posPubkey, publicKey.toBytes());
-      }
+
+  const onRenewWithBuff = async (posPubkey: string) => {
+    if (busy != null) return;
+    if (!anchorWallet || !config || !publicKey || !rigBuffConfig) return;
+    if (nowTs == null) {
+      setError("Missing clock data. Refresh and try again.");
       return;
     }
-    setStopDialogTarget({ pubkey: posPubkey, owner: ownerBytes });
-    setStopDialogOpen(true);
-  };
-  const confirmStopMining = async () => {
-    if (!stopDialogTarget) return;
-    const target = stopDialogTarget;
-    setStopDialogOpen(false);
-    setStopDialogTarget(null);
-    await onDeactivate(target.pubkey, target.owner);
+    const program = getProgram(connection, anchorWallet);
+    const activePositions = positions.filter(
+      (entry) =>
+        !entry.data.deactivated && nowTs < entry.data.endTs && entry.pubkey !== posPubkey
+    );
+    await withTx("Renew with buff", async () => {
+      const { ata, ix } = await ensureAta(publicKey, config.mindMint);
+      const remainingAccounts: AccountMeta[] = activePositions.map((entry) => ({
+        pubkey: new PublicKey(entry.pubkey),
+        isSigner: false,
+        isWritable: true,
+      }));
+      const tx = new Transaction();
+      if (ix) tx.add(ix);
+      const instruction = await program.methods
+        .renewRigWithBuff()
+        .accounts({
+          owner: publicKey,
+          config: deriveConfigPda(),
+          rigBuffConfig: deriveRigBuffConfigPda(),
+          userProfile: deriveUserProfilePda(publicKey),
+          position: new PublicKey(posPubkey),
+          stakingRewardVault: config.stakingRewardVault,
+          treasuryVault: config.treasuryVault,
+          mindMint: config.mindMint,
+          ownerMindAta: ata,
+          burnMindVault: rigBuffConfig.mindBurnVault,
+          treasuryMindVault: rigBuffConfig.mindTreasuryVault,
+          tokenProgram: TOKEN_PROGRAM_ID,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts(remainingAccounts)
+        .instruction();
+      tx.add(instruction);
+      return await program.provider.sendAndConfirm(tx, []);
+    });
   };
 
   const onStake = async () => {
@@ -1629,55 +1705,117 @@ export function PublicDashboard() {
               </div>
             </div>
             <div className="mt-4 grid max-h-[260px] gap-3 overflow-y-auto pr-2 sm:max-h-[440px]">
-              {positions.length === 0 ? (
+              {visiblePositions.length === 0 ? (
                 <div className="text-xs text-zinc-500">No positions yet.</div>
               ) : (
-                pendingPositions.map((entry) => {
+                visiblePositions.map((entry) => {
                   const p = entry.position;
-                  const remaining = nowTs ? Math.max(0, p.data.endTs - nowTs) : null;
-                  const expired = nowTs != null && nowTs >= p.data.endTs;
+                  const now = nowTs ?? null;
+                  const remaining = now != null ? Math.max(0, p.data.endTs - now) : null;
+                  const expired = now != null && now >= p.data.endTs;
+                  const graceEnds = p.data.endTs + graceSeconds;
+                  const inGrace = !p.data.deactivated && expired && now != null && now <= graceEnds;
+                  const afterGrace = !p.data.deactivated && expired && now != null && now > graceEnds;
+                  if (afterGrace) return null;
                   const bonusMultiplier = BPS_DENOMINATOR + levelBonusBpsBig;
                   const rigType = p.data.hpScaled
                     ? p.data.rigType
                     : rigTypeFromDuration(
                         p.data.startTs,
                         p.data.endTs,
-                        config ? Number(config.secondsPerDay) : 0
+                        secondsPerDayUi
                       );
                   const buffBpsBase = rigBuffBps(rigType, p.data.buffLevel);
                   const buffApplied =
                     p.data.buffLevel > 0 &&
                     (p.data.buffAppliedFromCycle === 0n ||
-                      nowTs == null ||
-                      BigInt(nowTs) >= p.data.buffAppliedFromCycle);
+                      now == null ||
+                      BigInt(now) >= p.data.buffAppliedFromCycle);
                   const buffBps = buffApplied ? BigInt(buffBpsBase) : 0n;
-                  const buffedHp =
-                    p.data.deactivated || expired
-                      ? p.data.hp
-                      : (p.data.hp * (BPS_DENOMINATOR + buffBps)) / BPS_DENOMINATOR;
-                  const positionHpEffective =
-                    p.data.deactivated || expired
-                      ? p.data.hp
-                      : (buffedHp * bonusMultiplier) / BPS_DENOMINATOR;
-                  const positionHpLabel =
-                    p.data.deactivated || expired
-                      ? formatFixed2(p.data.hp)
-                      : formatFixed2(positionHpEffective);
+                  const baseHp = p.data.hp;
+                  const hpWithBuff = (baseHp * (BPS_DENOMINATOR + buffBps)) / BPS_DENOMINATOR;
+                  const positionHpEffective = (hpWithBuff * bonusMultiplier) / BPS_DENOMINATOR;
+                  const positionHpLabel = formatFixed2(hpWithBuff);
                   const positionRateHp =
                     p.data.deactivated || expired ? 0n : positionHpEffective;
+                  const buffBonusPct =
+                    buffApplied && buffBpsBase > 0
+                      ? `+${(buffBpsBase / 100).toLocaleString("en-US", {
+                          minimumFractionDigits: 1,
+                          maximumFractionDigits: 1,
+                        })}%`
+                      : null;
+                  const timeLine = expired
+                    ? inGrace
+                      ? `Expired — grace: ${formatDurationSeconds(
+                          Math.max(0, graceEnds - (now ?? 0))
+                        )} left`
+                      : "Expired"
+                    : `Ends in ${remaining == null ? "-" : formatDurationSeconds(remaining)}`;
+                  const timeClass = expired
+                    ? inGrace
+                      ? "text-amber-300"
+                      : "text-zinc-500"
+                    : "text-zinc-400";
+                  const showRenew =
+                    now != null &&
+                    !p.data.deactivated &&
+                    (inGrace || (remaining != null && remaining <= renewWindowSeconds));
+                  const canRenewNow = inGrace && !p.data.deactivated;
+                  const contractMeta = CONTRACTS[rigType] ?? CONTRACTS[0];
+                  const baseHpScaled = BigInt(Math.round(contractMeta.hp * 100));
+                  const rewardBase =
+                    rigBuffConfig && mintDecimals
+                      ? (baseHpScaled *
+                          rigBuffConfig.mindPerHpPerDay *
+                          BigInt(contractMeta.durationDays)) /
+                        HP_SCALE
+                      : null;
+                  const buffCostBase =
+                    rewardBase != null
+                      ? (rewardBase * RIG_BUFF_COST_BPS) / BPS_DENOMINATOR
+                      : null;
+                  const buffCostLabel =
+                    buffCostBase != null && mintDecimals
+                      ? formatRoundedToken(buffCostBase, mintDecimals.mind, 2)
+                      : "-";
+                  const buffButtonLabel = rigBuffCapReached ? "Buff cap reached (global)" : "Renew with buff";
+                  const buffDisabled =
+                    busy != null ||
+                    !canRenewNow ||
+                    rigBuffCapReached ||
+                    !rigBuffConfig ||
+                    !mintDecimals;
                   return (
                     <div key={p.pubkey} className="rounded-2xl border border-white/10 bg-white/5 p-3">
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm text-zinc-200">HP {positionHpLabel}</div>
-                        <Badge variant={expired ? "danger" : "success"}>
-                          {expired ? "expired" : "active"}
-                        </Badge>
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm font-medium text-white">
+                          HP {positionHpLabel}
+                          {buffBonusPct ? (
+                            <span className="ml-2 text-xs text-emerald-200">
+                              ({buffBonusPct}) <span aria-hidden="true">↑</span>
+                            </span>
+                          ) : null}
+                        </div>
+                        {!expired ? (
+                          <span className="text-[11px] uppercase tracking-[0.2em] text-emerald-300">
+                            active
+                          </span>
+                        ) : null}
                       </div>
-                      <div className="mt-2 text-xs text-zinc-400" title={expiryTooltip}>
-                        Ends in {remaining == null ? "-" : formatDurationSeconds(remaining)}
+                      <div className={`mt-2 text-xs ${timeClass}`} title={expiryTooltip}>
+                        {timeLine}
                       </div>
+                      {inGrace ? (
+                        <div className="mt-1 text-[11px] text-zinc-500">
+                          You can renew this rig and keep your bonus.
+                        </div>
+                      ) : null}
                       {mintDecimals ? (
-                        <div className="mt-2 text-[11px] text-zinc-500">
+                        <div
+                          className="mt-2 text-[11px] text-zinc-500"
+                          title="Includes rig bonus and account XP bonus."
+                        >
                           {networkHpHundredths > 0n
                             ? `Current rate: ${formatRoundedToken(
                                 ((config?.emissionPerSec ?? 0n) * 3_600n * positionRateHp) /
@@ -1687,16 +1825,43 @@ export function PublicDashboard() {
                             : "Rate unavailable"}
                         </div>
                       ) : null}
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => requestStopMining(p.pubkey, p.data.owner)}
-                          disabled={busy != null || !expired}
-                          title="Stops mining for this rig. This action cannot be undone."
-                        >
-                          Stop mining
-                        </Button>
-                      </div>
+                      {showRenew ? (
+                        <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3">
+                          <div className="text-[11px] text-zinc-300">
+                            Renew your rig to keep earning
+                          </div>
+                          <div className="mt-3 space-y-2">
+                            <Button
+                              size="sm"
+                              className="w-full"
+                              onClick={() => void onRenew(p.pubkey)}
+                              disabled={busy != null || !canRenewNow}
+                              title={canRenewNow ? "" : "Available after expiry or during grace."}
+                            >
+                              {busy === "Renew rig" ? "Submitting..." : "Renew rig"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="w-full"
+                              onClick={() => void onRenewWithBuff(p.pubkey)}
+                              disabled={buffDisabled}
+                              title={
+                                rigBuffCapReached
+                                  ? "Your global rig buff cap is reached."
+                                  : canRenewNow
+                                  ? "Applies from the next cycle."
+                                  : "Available after expiry or during grace."
+                              }
+                            >
+                              {busy === "Renew with buff" ? "Submitting..." : buffButtonLabel}
+                            </Button>
+                            <div className="text-[11px] text-zinc-500">
+                              Buff increases this rig&apos;s HP for the next cycle. Cost:{" "}
+                              {buffCostLabel} MIND (burn + treasury).
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   );
                 })
@@ -1968,33 +2133,6 @@ export function PublicDashboard() {
         ) : null}
         {loading ? <div className="mt-4 text-xs text-zinc-500">Refreshing...</div> : null}
       </main>
-      <Dialog
-        open={stopDialogOpen}
-        onOpenChange={(open) => {
-          setStopDialogOpen(open);
-          if (!open) setStopDialogTarget(null);
-        }}
-        title="Stop mining?"
-        description="Stopping early will permanently disable this rig. You will no longer receive rewards from it."
-        footer={
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setStopDialogOpen(false);
-                setStopDialogTarget(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button variant="danger" onClick={() => void confirmStopMining()} disabled={busy != null}>
-              Yes — stop mining
-            </Button>
-          </div>
-        }
-      >
-        <div className="text-xs text-zinc-500">This action cannot be undone.</div>
-      </Dialog>
     </div>
   );
 }
