@@ -463,10 +463,6 @@ export function PublicDashboard() {
           )
         )
       : 100;
-  const hpTooltip =
-    levelBonusBps > 0
-      ? `Your HP includes a ${levelBonusPct}% level bonus. Leveling only increases your share of rewards, not the global MIND emission.`
-      : "Your HP is currently based only on your active rigs. Leveling will add a small bonus on top of this value.";
   const levelUpCostTokens = userLevel < LEVEL_CAP ? LEVEL_UP_COSTS[userLevel - 1] ?? null : null;
   const levelUpCostBase =
     levelUpCostTokens != null && mintDecimals != null
@@ -1186,16 +1182,7 @@ export function PublicDashboard() {
                   </span>
                 ) : null}
               </div>
-              <div className="mt-2 flex items-center justify-between text-[10px] uppercase tracking-[0.2em] text-zinc-400">
-                <span>Your HP</span>
-                <span
-                  className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-white/10 text-[9px] text-zinc-400"
-                  title={hpTooltip}
-                  aria-label="HP info"
-                >
-                  i
-                </span>
-              </div>
+              <div className="mt-2 text-[10px] uppercase tracking-[0.2em] text-zinc-400">Your HP</div>
             </Card>
             <Card className="p-4">
               <div className="text-3xl font-semibold text-white">
