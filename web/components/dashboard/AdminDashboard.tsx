@@ -102,6 +102,18 @@ export function AdminDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [criticalBlocked, setCriticalBlocked] = useState(false);
 
+  const stakingEpochBalances = useMemo(() => {
+    if (!config) return null;
+    const unaccounted =
+      stakingRewardBalance > config.stakingAccountedBalance
+        ? stakingRewardBalance - config.stakingAccountedBalance
+        : 0n;
+    const nextEpoch = config.stakingUndistributedXnt + unaccounted;
+    const currentEpoch =
+      stakingRewardBalance > nextEpoch ? stakingRewardBalance - nextEpoch : 0n;
+    return { currentEpoch, nextEpoch };
+  }, [config, stakingRewardBalance]);
+
   const refresh = useCallback(async () => {
     setError(null);
     try {
@@ -588,6 +600,20 @@ export function AdminDashboard() {
             <div className="mt-2 text-xs text-zinc-400">
               Treasury vault (available):{" "}
               {mintDecimals ? formatTokenAmount(treasuryBalance, mintDecimals.xnt, 4) : "-"} XNT
+            </div>
+            <div className="mt-2 text-xs text-zinc-400">
+              Staking (current epoch):{" "}
+              {mintDecimals && stakingEpochBalances
+                ? formatTokenAmount(stakingEpochBalances.currentEpoch, mintDecimals.xnt, 4)
+                : "-"}{" "}
+              XNT
+            </div>
+            <div className="mt-2 text-xs text-zinc-400">
+              Staking (next epoch):{" "}
+              {mintDecimals && stakingEpochBalances
+                ? formatTokenAmount(stakingEpochBalances.nextEpoch, mintDecimals.xnt, 4)
+                : "-"}{" "}
+              XNT
             </div>
           </Card>
         </div>
