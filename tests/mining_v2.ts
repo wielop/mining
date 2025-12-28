@@ -1314,6 +1314,24 @@ describe("mining_v2", () => {
     }
 
     await warpForwardSeconds(3);
+    try {
+      await program.methods
+        .renewRig()
+        .accounts({
+          owner: user.publicKey,
+          config: configPda,
+          userProfile: profilePda(user.publicKey),
+          position: positionKey,
+          stakingRewardVault,
+          treasuryVault,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([user])
+        .rpc();
+      expect.fail("Expected renewal to fail before expiry (grace only)");
+    } catch (err) {
+      expect(`${err}`).to.include("PositionRenewTooEarly");
+    }
     await program.methods
       .claimMind()
       .accounts({

@@ -308,9 +308,8 @@ pub mod mining_v2 {
         update_user_xp(&mut profile, now)?;
         apply_pending_buff(cfg, &mut position, profile.level, now)?;
 
-        let renew_window_start = renew_window_start_ts(position.end_ts, cfg.seconds_per_day)?;
         let grace_deadline = grace_deadline_ts(position.end_ts, cfg.seconds_per_day)?;
-        require!(now >= renew_window_start, ErrorCode::PositionRenewTooEarly);
+        require!(now >= position.end_ts, ErrorCode::PositionRenewTooEarly);
         require!(now <= grace_deadline, ErrorCode::PositionGraceExpired);
 
         let rig_type = position_rig_type(&position, cfg)?;
@@ -516,13 +515,9 @@ pub mod mining_v2 {
         let renewed_buff_bps = rig_buff_bps(rig_type, new_buff_level);
         let renewed_buffed_hp_scaled = apply_bps(renewed_base_hp_scaled, renewed_buff_bps)?;
 
-        let base_total_after = if is_early {
-            base_total_scaled
-        } else {
-            base_total_scaled
-                .checked_add(renewed_base_hp_scaled)
-                .ok_or(ErrorCode::MathOverflow)?
-        };
+        let base_total_after = base_total_scaled_other
+            .checked_add(renewed_base_hp_scaled)
+            .ok_or(ErrorCode::MathOverflow)?;
         let buffed_total_after = buffed_total_scaled_other
             .checked_add(renewed_buffed_hp_scaled)
             .ok_or(ErrorCode::MathOverflow)?;

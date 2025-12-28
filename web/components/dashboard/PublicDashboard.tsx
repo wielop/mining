@@ -1761,7 +1761,8 @@ export function PublicDashboard() {
                     now != null &&
                     !p.data.deactivated &&
                     (inGrace || (remaining != null && remaining <= renewWindowSeconds));
-                  const canRenewNow =
+                  const canRenewStandard = !p.data.deactivated && inGrace;
+                  const canRenewWithBuff =
                     !p.data.deactivated &&
                     (inGrace || (remaining != null && remaining <= renewWindowSeconds));
                   const contractMeta = CONTRACTS[rigType] ?? CONTRACTS[0];
@@ -1784,7 +1785,7 @@ export function PublicDashboard() {
                   const buffButtonLabel = rigBuffCapReached ? "Buff cap reached (global)" : "Renew with buff";
                   const buffDisabled =
                     busy != null ||
-                    !canRenewNow ||
+                    !canRenewWithBuff ||
                     rigBuffCapReached ||
                     !rigBuffConfig ||
                     !mintDecimals;
@@ -1837,9 +1838,9 @@ export function PublicDashboard() {
                               size="sm"
                               className="w-full"
                               onClick={() => void onRenew(p.pubkey)}
-                              disabled={busy != null || !canRenewNow}
+                              disabled={busy != null || !canRenewStandard}
                               title={
-                                canRenewNow ? "" : "Available in the last 3 days or during grace."
+                                canRenewStandard ? "" : "Available after expiry during grace."
                               }
                             >
                               {busy === "Renew rig" ? "Submitting..." : "Renew rig"}
@@ -1854,7 +1855,7 @@ export function PublicDashboard() {
                                   ? "Your global rig buff cap is reached."
                                   : !rigBuffConfig || !mintDecimals
                                   ? "Rig buff config is not initialized yet."
-                                  : canRenewNow
+                                  : canRenewWithBuff
                                   ? "Applies from the next cycle."
                                   : "Available in the last 3 days or during grace."
                               }
