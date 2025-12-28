@@ -1267,6 +1267,99 @@ describe("mining_v2", () => {
     expect(treasuryAfter.sub(treasuryBefore).toString()).to.eq(treasuryExpected.toString());
   });
 
+  it("allows early renewal within window and defers buff to next cycle", async () => {
+    const user = Keypair.generate();
+    await airdrop(user.publicKey, 50);
+    await createAssociatedTokenAccountIdempotent(
+      provider.connection,
+      admin,
+      mindMint,
+      user.publicKey
+    );
+
+    await program.methods
+      .buyContract(0, new BN(0))
+      .accounts({
+        owner: user.publicKey,
+        config: configPda,
+        userProfile: profilePda(user.publicKey),
+        position: positionPda(user.publicKey, 0),
+        stakingRewardVault,
+        treasuryVault,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([user])
+      .rpc();
+
+    const positionKey = positionPda(user.publicKey, 0);
+    const before = await program.account.minerPosition.fetch(positionKey);
+    const startBefore = before.startTs.toNumber();
+    const endBefore = before.endTs.toNumber();
+
+    await warpForwardSeconds(2);
+    try {
+      await program.methods
+        .renewRig()
+        .accounts({
+          owner: user.publicKey,
+          config: configPda,
+          userProfile: profilePda(user.publicKey),
+          position: positionKey,
+          stakingRewardVault,
+          treasuryVault,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([user])
+        .rpc();
+      expect.fail("Expected early renewal to fail before window");
+    } catch (err) {
+      expect(`${err}`).to.include("PositionRenewTooEarly");
+    }
+
+    await warpForwardSeconds(3);
+    await program.methods
+      .claimMind()
+      .accounts({
+        owner: user.publicKey,
+        config: configPda,
+        userProfile: profilePda(user.publicKey),
+        position: positionKey,
+        vaultAuthority,
+        mindMint,
+        userMindAta: userMindAta(user.publicKey),
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([user])
+      .rpc();
+
+    await program.methods
+      .renewRigWithBuff()
+      .accounts({
+        owner: user.publicKey,
+        config: configPda,
+        rigBuffConfig: rigBuffConfigPda,
+        userProfile: profilePda(user.publicKey),
+        position: positionKey,
+        stakingRewardVault,
+        treasuryVault,
+        mindMint,
+        ownerMindAta: userMindAta(user.publicKey),
+        burnMindVault: mindBurnVault,
+        treasuryMindVault: mindTreasuryVault,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([user])
+      .rpc();
+
+    const after = await program.account.minerPosition.fetch(positionKey);
+    expect(after.startTs.toNumber()).to.eq(startBefore);
+    expect(after.endTs.toNumber()).to.eq(endBefore + 7);
+    expect(after.buffLevel).to.eq(1);
+    expect(after.buffAppliedFromCycle.toNumber()).to.eq(endBefore);
+  });
+
   it("buff progression caps for pro and industrial rigs", async () => {
     const proUser = Keypair.generate();
     await airdrop(proUser.publicKey, 100);

@@ -23,6 +23,7 @@ const HP_SCALE: u128 = 100;
 const HP_SCALE_U64: u64 = 100;
 const HP_SCALED_MARKER: u64 = 1 << 63;
 const SECONDS_PER_DAY_DEFAULT: u64 = 86_400;
+const RENEW_WINDOW_DAYS: u64 = 3;
 const STAKING_SHARE_BPS: u128 = 3_000; // 30%
 const BADGE_BONUS_CAP_BPS: u16 = 2_000; // 20%
 const LEVEL_BONUS_CAP_BPS: u16 = 1_000; // 10%
@@ -305,9 +306,11 @@ pub mod mining_v2 {
 
         require_keys_eq!(position.owner, ctx.accounts.owner.key(), ErrorCode::Unauthorized);
         update_user_xp(&mut profile, now)?;
+        apply_pending_buff(cfg, &mut position, profile.level, now)?;
 
-        require!(now >= position.end_ts, ErrorCode::PositionNotExpired);
+        let renew_window_start = renew_window_start_ts(position.end_ts, cfg.seconds_per_day)?;
         let grace_deadline = grace_deadline_ts(position.end_ts, cfg.seconds_per_day)?;
+        require!(now >= renew_window_start, ErrorCode::PositionRenewTooEarly);
         require!(now <= grace_deadline, ErrorCode::PositionGraceExpired);
 
         let rig_type = position_rig_type(&position, cfg)?;
@@ -315,24 +318,7 @@ pub mod mining_v2 {
         let duration_seconds = (duration_days as i64)
             .checked_mul(cfg.seconds_per_day as i64)
             .ok_or(ErrorCode::MathOverflow)?;
-
-        if !position.expired {
-            expire_position(cfg, &mut position, &mut profile, now)?;
-        } else {
-            update_mining_global(cfg, now)?;
-        }
-
-        let new_active_hp = profile
-            .active_hp
-            .checked_add(base_hp_scaled)
-            .ok_or(ErrorCode::MathOverflow)?;
-        require!(
-            new_active_hp <= cfg
-                .max_effective_hp
-                .checked_mul(HP_SCALE_U64)
-                .ok_or(ErrorCode::MathOverflow)?,
-            ErrorCode::MaxEffectiveHpExceeded
-        );
+        let is_early = now < position.end_ts;
 
         ensure_position_v2(
             &ctx.accounts.position,
@@ -340,31 +326,61 @@ pub mod mining_v2 {
             &ctx.accounts.system_program,
         )?;
 
-        position.start_ts = now;
-        position.end_ts = now
-            .checked_add(duration_seconds)
-            .ok_or(ErrorCode::MathOverflow)?;
-        position.hp = base_hp_scaled;
-        position.hp_scaled = true;
-        position.rig_type = rig_type;
-        position.expired = false;
-        position.deactivated = false;
-        position.final_acc_mind_per_hp = 0;
+        if is_early {
+            update_mining_global(cfg, now)?;
+            position.end_ts = position
+                .end_ts
+                .checked_add(duration_seconds)
+                .ok_or(ErrorCode::MathOverflow)?;
+            position.rig_type = rig_type;
+            position.expired = false;
+            position.deactivated = false;
+        } else {
+            if !position.expired {
+                expire_position(cfg, &mut position, &mut profile, now)?;
+            } else {
+                update_mining_global(cfg, now)?;
+            }
 
-        let buff_bps = position_buff_bps(&position, rig_type, now);
-        let hp_effective = effective_hp_scaled(
-            base_hp_scaled as u128,
-            profile.level,
-            buff_bps,
-        )?;
-        position.reward_debt = earned_per_hp(hp_effective, cfg.acc_mind_per_hp)?;
+            let new_active_hp = profile
+                .active_hp
+                .checked_add(base_hp_scaled)
+                .ok_or(ErrorCode::MathOverflow)?;
+            require!(
+                new_active_hp <= cfg
+                    .max_effective_hp
+                    .checked_mul(HP_SCALE_U64)
+                    .ok_or(ErrorCode::MathOverflow)?,
+                ErrorCode::MaxEffectiveHpExceeded
+            );
 
-        profile.active_hp = new_active_hp;
-        let hp_effective_u64 = u64::try_from(hp_effective).map_err(|_| ErrorCode::MathOverflow)?;
-        cfg.network_hp_active = cfg
-            .network_hp_active
-            .checked_add(hp_effective_u64)
-            .ok_or(ErrorCode::MathOverflow)?;
+            position.start_ts = now;
+            position.end_ts = now
+                .checked_add(duration_seconds)
+                .ok_or(ErrorCode::MathOverflow)?;
+            position.hp = base_hp_scaled;
+            position.hp_scaled = true;
+            position.rig_type = rig_type;
+            position.expired = false;
+            position.deactivated = false;
+            position.final_acc_mind_per_hp = 0;
+
+            let buff_bps = position_buff_bps(&position, rig_type, now);
+            let hp_effective = effective_hp_scaled(
+                base_hp_scaled as u128,
+                profile.level,
+                buff_bps,
+            )?;
+            position.reward_debt = earned_per_hp(hp_effective, cfg.acc_mind_per_hp)?;
+
+            profile.active_hp = new_active_hp;
+            let hp_effective_u64 =
+                u64::try_from(hp_effective).map_err(|_| ErrorCode::MathOverflow)?;
+            cfg.network_hp_active = cfg
+                .network_hp_active
+                .checked_add(hp_effective_u64)
+                .ok_or(ErrorCode::MathOverflow)?;
+        }
 
         let staking_share = (cost_base as u128)
             .checked_mul(STAKING_SHARE_BPS)
@@ -427,9 +443,11 @@ pub mod mining_v2 {
 
         require_keys_eq!(position.owner, ctx.accounts.owner.key(), ErrorCode::Unauthorized);
         update_user_xp(&mut profile, now)?;
+        apply_pending_buff(cfg, &mut position, profile.level, now)?;
 
-        require!(now >= position.end_ts, ErrorCode::PositionNotExpired);
+        let renew_window_start = renew_window_start_ts(position.end_ts, cfg.seconds_per_day)?;
         let grace_deadline = grace_deadline_ts(position.end_ts, cfg.seconds_per_day)?;
+        require!(now >= renew_window_start, ErrorCode::PositionRenewTooEarly);
         require!(now <= grace_deadline, ErrorCode::PositionGraceExpired);
 
         let rig_type = position_rig_type(&position, cfg)?;
@@ -437,6 +455,8 @@ pub mod mining_v2 {
         let duration_seconds = (duration_days as i64)
             .checked_mul(cfg.seconds_per_day as i64)
             .ok_or(ErrorCode::MathOverflow)?;
+        let is_early = now < position.end_ts;
+        let old_end_ts = position.end_ts;
 
         let max_buff = rig_max_buff_level(rig_type);
         let mut new_buff_level = position.buff_level;
@@ -446,14 +466,16 @@ pub mod mining_v2 {
                 .ok_or(ErrorCode::MathOverflow)?;
         }
 
-        if !position.expired {
+        if is_early {
+            update_mining_global(cfg, now)?;
+        } else if !position.expired {
             expire_position(cfg, &mut position, &mut profile, now)?;
         } else {
             update_mining_global(cfg, now)?;
         }
 
-        let mut base_total_scaled: u128 = 0;
-        let mut buffed_total_scaled: u128 = 0;
+        let mut base_total_scaled_other: u128 = 0;
+        let mut buffed_total_scaled_other: u128 = 0;
         for info in ctx.remaining_accounts.iter() {
             let entry = load_position_any(info)?;
             if entry.owner != profile.owner {
@@ -468,14 +490,22 @@ pub mod mining_v2 {
             let rig_type = position_rig_type(&entry, cfg)?;
             let base_hp_scaled = position_base_hp_scaled(&entry)?;
             let buff_bps = position_buff_bps(&entry, rig_type, now);
-            base_total_scaled = base_total_scaled
+            base_total_scaled_other = base_total_scaled_other
                 .checked_add(base_hp_scaled)
                 .ok_or(ErrorCode::MathOverflow)?;
             let buffed = apply_bps(base_hp_scaled, buff_bps)?;
-            buffed_total_scaled = buffed_total_scaled
+            buffed_total_scaled_other = buffed_total_scaled_other
                 .checked_add(buffed)
                 .ok_or(ErrorCode::MathOverflow)?;
         }
+        let base_hp_scaled_current = position_base_hp_scaled(&position)?;
+        let base_total_scaled = if is_early {
+            base_total_scaled_other
+                .checked_add(base_hp_scaled_current)
+                .ok_or(ErrorCode::MathOverflow)?
+        } else {
+            base_total_scaled_other
+        };
         let profile_hp_scaled = profile.active_hp as u128;
         require!(
             base_total_scaled == profile_hp_scaled,
@@ -486,10 +516,14 @@ pub mod mining_v2 {
         let renewed_buff_bps = rig_buff_bps(rig_type, new_buff_level);
         let renewed_buffed_hp_scaled = apply_bps(renewed_base_hp_scaled, renewed_buff_bps)?;
 
-        let base_total_after = base_total_scaled
-            .checked_add(renewed_base_hp_scaled)
-            .ok_or(ErrorCode::MathOverflow)?;
-        let buffed_total_after = buffed_total_scaled
+        let base_total_after = if is_early {
+            base_total_scaled
+        } else {
+            base_total_scaled
+                .checked_add(renewed_base_hp_scaled)
+                .ok_or(ErrorCode::MathOverflow)?
+        };
+        let buffed_total_after = buffed_total_scaled_other
             .checked_add(renewed_buffed_hp_scaled)
             .ok_or(ErrorCode::MathOverflow)?;
         if base_total_after > 0 {
@@ -559,18 +593,6 @@ pub mod mining_v2 {
             }
         }
 
-        let new_active_hp = profile
-            .active_hp
-            .checked_add(base_hp_scaled)
-            .ok_or(ErrorCode::MathOverflow)?;
-        require!(
-            new_active_hp <= cfg
-                .max_effective_hp
-                .checked_mul(HP_SCALE_U64)
-                .ok_or(ErrorCode::MathOverflow)?,
-            ErrorCode::MaxEffectiveHpExceeded
-        );
-
         ensure_position_v2(
             &ctx.accounts.position,
             &ctx.accounts.owner.to_account_info(),
@@ -578,38 +600,67 @@ pub mod mining_v2 {
         )?;
 
         let buff_applied_from_cycle = if new_buff_level > position.buff_level {
-            now as u64
+            if is_early {
+                old_end_ts as u64
+            } else {
+                0
+            }
         } else {
             position.buff_applied_from_cycle
         };
 
-        position.start_ts = now;
-        position.end_ts = now
-            .checked_add(duration_seconds)
-            .ok_or(ErrorCode::MathOverflow)?;
-        position.hp = base_hp_scaled;
-        position.hp_scaled = true;
-        position.rig_type = rig_type;
-        position.buff_level = new_buff_level;
-        position.buff_applied_from_cycle = buff_applied_from_cycle;
-        position.expired = false;
-        position.deactivated = false;
-        position.final_acc_mind_per_hp = 0;
+        if is_early {
+            position.end_ts = position
+                .end_ts
+                .checked_add(duration_seconds)
+                .ok_or(ErrorCode::MathOverflow)?;
+            position.rig_type = rig_type;
+            position.buff_level = new_buff_level;
+            position.buff_applied_from_cycle = buff_applied_from_cycle;
+            position.expired = false;
+            position.deactivated = false;
+        } else {
+            let new_active_hp = profile
+                .active_hp
+                .checked_add(base_hp_scaled)
+                .ok_or(ErrorCode::MathOverflow)?;
+            require!(
+                new_active_hp <= cfg
+                    .max_effective_hp
+                    .checked_mul(HP_SCALE_U64)
+                    .ok_or(ErrorCode::MathOverflow)?,
+                ErrorCode::MaxEffectiveHpExceeded
+            );
 
-        let buff_bps = position_buff_bps(&position, rig_type, now);
-        let hp_effective = effective_hp_scaled(
-            base_hp_scaled as u128,
-            profile.level,
-            buff_bps,
-        )?;
-        position.reward_debt = earned_per_hp(hp_effective, cfg.acc_mind_per_hp)?;
+            position.start_ts = now;
+            position.end_ts = now
+                .checked_add(duration_seconds)
+                .ok_or(ErrorCode::MathOverflow)?;
+            position.hp = base_hp_scaled;
+            position.hp_scaled = true;
+            position.rig_type = rig_type;
+            position.buff_level = new_buff_level;
+            position.buff_applied_from_cycle = buff_applied_from_cycle;
+            position.expired = false;
+            position.deactivated = false;
+            position.final_acc_mind_per_hp = 0;
 
-        profile.active_hp = new_active_hp;
-        let hp_effective_u64 = u64::try_from(hp_effective).map_err(|_| ErrorCode::MathOverflow)?;
-        cfg.network_hp_active = cfg
-            .network_hp_active
-            .checked_add(hp_effective_u64)
-            .ok_or(ErrorCode::MathOverflow)?;
+            let buff_bps = position_buff_bps(&position, rig_type, now);
+            let hp_effective = effective_hp_scaled(
+                base_hp_scaled as u128,
+                profile.level,
+                buff_bps,
+            )?;
+            position.reward_debt = earned_per_hp(hp_effective, cfg.acc_mind_per_hp)?;
+
+            profile.active_hp = new_active_hp;
+            let hp_effective_u64 =
+                u64::try_from(hp_effective).map_err(|_| ErrorCode::MathOverflow)?;
+            cfg.network_hp_active = cfg
+                .network_hp_active
+                .checked_add(hp_effective_u64)
+                .ok_or(ErrorCode::MathOverflow)?;
+        }
 
         let staking_share = (cost_base as u128)
             .checked_mul(STAKING_SHARE_BPS)
@@ -681,6 +732,7 @@ pub mod mining_v2 {
             ErrorCode::Unauthorized
         );
         update_user_xp(&mut profile, now)?;
+        apply_pending_buff(cfg, &mut position, profile.level, now)?;
 
         if !position.deactivated && !position.expired && now >= position.end_ts {
             expire_position(cfg, &mut position, &mut profile, now)?;
@@ -739,6 +791,7 @@ pub mod mining_v2 {
             now,
         )?;
         update_user_xp(&mut profile, now)?;
+        apply_pending_buff(cfg, &mut position, profile.level, now)?;
 
         require!(now >= position.end_ts, ErrorCode::PositionNotExpired);
         if position.deactivated {
@@ -805,6 +858,7 @@ pub mod mining_v2 {
             require_keys_eq!(position.owner, profile.owner, ErrorCode::Unauthorized);
             require!(!position.deactivated, ErrorCode::InvalidLevelUpPositions);
             require!(!position.expired && now < position.end_ts, ErrorCode::InvalidLevelUpPositions);
+            apply_pending_buff(cfg, &mut position, profile.level, now)?;
             let rig_type = position_rig_type(&position, cfg)?;
             let base_hp_scaled = position_base_hp_scaled(&position)?;
             let buff_bps = position_buff_bps(&position, rig_type, now);
@@ -2720,6 +2774,75 @@ fn grace_deadline_ts(end_ts: i64, seconds_per_day: u64) -> Result<i64> {
         .ok_or(ErrorCode::MathOverflow.into())
 }
 
+fn renew_window_start_ts(end_ts: i64, seconds_per_day: u64) -> Result<i64> {
+    let window = (seconds_per_day as i64)
+        .checked_mul(RENEW_WINDOW_DAYS as i64)
+        .ok_or(ErrorCode::MathOverflow)?;
+    end_ts
+        .checked_sub(window)
+        .ok_or(ErrorCode::MathOverflow.into())
+}
+
+fn apply_pending_buff(
+    cfg: &mut Account<Config>,
+    position: &mut PositionData,
+    profile_level: u8,
+    now: i64,
+) -> Result<()> {
+    if position.deactivated || position.expired {
+        return Ok(());
+    }
+    if position.buff_applied_from_cycle == 0 {
+        return Ok(());
+    }
+    let apply_ts = position.buff_applied_from_cycle as i64;
+    if now < apply_ts {
+        return Ok(());
+    }
+    if position.buff_level == 0 {
+        position.buff_applied_from_cycle = 0;
+        return Ok(());
+    }
+    let rig_type = position_rig_type(position, cfg)?;
+    let base_hp_scaled = position_base_hp_scaled(position)?;
+    let prev_level = position.buff_level.saturating_sub(1);
+    let prev_bps = rig_buff_bps(rig_type, prev_level);
+    let new_bps = rig_buff_bps(rig_type, position.buff_level);
+    if prev_bps == new_bps {
+        position.buff_applied_from_cycle = 0;
+        return Ok(());
+    }
+    let effective_ts = if apply_ts < cfg.last_update_ts {
+        cfg.last_update_ts
+    } else {
+        apply_ts
+    };
+    if effective_ts > cfg.last_update_ts {
+        update_mining_global(cfg, effective_ts)?;
+    }
+    let hp_prev = effective_hp_scaled(base_hp_scaled, profile_level, prev_bps)?;
+    let hp_new = effective_hp_scaled(base_hp_scaled, profile_level, new_bps)?;
+    if hp_new > hp_prev {
+        let delta = hp_new
+            .checked_sub(hp_prev)
+            .ok_or(ErrorCode::MathOverflow)?;
+        let delta_u64 = u64::try_from(delta).map_err(|_| ErrorCode::MathOverflow)?;
+        cfg.network_hp_active = cfg
+            .network_hp_active
+            .checked_add(delta_u64)
+            .ok_or(ErrorCode::MathOverflow)?;
+    }
+    let acc_at_apply = cfg.acc_mind_per_hp;
+    let earned_old = earned_per_hp(hp_prev, acc_at_apply)?;
+    let pending_before = earned_old.saturating_sub(position.reward_debt);
+    let earned_new = earned_per_hp(hp_new, acc_at_apply)?;
+    position.reward_debt = earned_new
+        .checked_sub(pending_before)
+        .ok_or(ErrorCode::MathOverflow)?;
+    position.buff_applied_from_cycle = 0;
+    Ok(())
+}
+
 fn expire_position(
     cfg: &mut Account<Config>,
     position: &mut PositionData,
@@ -2867,6 +2990,8 @@ pub enum ErrorCode {
     NothingToClaim,
     #[msg("Position not expired")]
     PositionNotExpired,
+    #[msg("Renewal window not open")]
+    PositionRenewTooEarly,
     #[msg("Invalid mint authority")]
     InvalidMintAuthority,
     #[msg("Insufficient stake balance")]

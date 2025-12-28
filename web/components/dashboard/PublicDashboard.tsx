@@ -1761,7 +1761,9 @@ export function PublicDashboard() {
                     now != null &&
                     !p.data.deactivated &&
                     (inGrace || (remaining != null && remaining <= renewWindowSeconds));
-                  const canRenewNow = inGrace && !p.data.deactivated;
+                  const canRenewNow =
+                    !p.data.deactivated &&
+                    (inGrace || (remaining != null && remaining <= renewWindowSeconds));
                   const contractMeta = CONTRACTS[rigType] ?? CONTRACTS[0];
                   const baseHpScaled = BigInt(Math.round(contractMeta.hp * 100));
                   const rewardBase =
@@ -1836,7 +1838,9 @@ export function PublicDashboard() {
                               className="w-full"
                               onClick={() => void onRenew(p.pubkey)}
                               disabled={busy != null || !canRenewNow}
-                              title={canRenewNow ? "" : "Available after expiry or during grace."}
+                              title={
+                                canRenewNow ? "" : "Available in the last 3 days or during grace."
+                              }
                             >
                               {busy === "Renew rig" ? "Submitting..." : "Renew rig"}
                             </Button>
@@ -1848,9 +1852,11 @@ export function PublicDashboard() {
                               title={
                                 rigBuffCapReached
                                   ? "Your global rig buff cap is reached."
+                                  : !rigBuffConfig || !mintDecimals
+                                  ? "Rig buff config is not initialized yet."
                                   : canRenewNow
                                   ? "Applies from the next cycle."
-                                  : "Available after expiry or during grace."
+                                  : "Available in the last 3 days or during grace."
                               }
                             >
                               {busy === "Renew with buff" ? "Submitting..." : buffButtonLabel}
