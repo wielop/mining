@@ -1887,7 +1887,7 @@ export function PublicDashboard() {
                       {showRenew ? (
                         <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3">
                         <div className="text-[11px] text-zinc-300">
-                          Renew your rig to keep earning
+                          Wzmocnij swoją koparkę w następnej rundzie
                         </div>
                         {graceLeftLabel ? (
                           <div className="mt-1 text-[11px] text-zinc-500">
