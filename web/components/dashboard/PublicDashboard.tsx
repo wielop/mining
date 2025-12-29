@@ -251,8 +251,19 @@ function formatFullPrecisionToken(amountBase: bigint, decimals: number) {
 
 export function PublicDashboard() {
   const { connection } = useConnection();
-  const { publicKey } = useWallet();
+  const { publicKey: walletPublicKey } = useWallet();
   const anchorWallet = useAnchorWallet();
+  const viewPublicKey = useMemo(() => {
+    const raw = process.env.NEXT_PUBLIC_E2E_WALLET?.trim();
+    if (!raw) return null;
+    try {
+      return new PublicKey(raw);
+    } catch {
+      return null;
+    }
+  }, []);
+  const publicKey = walletPublicKey ?? viewPublicKey;
+  const canTransact = Boolean(anchorWallet && walletPublicKey);
   const { push: pushToast } = useToast();
 
   const [config, setConfig] = useState<DecodedConfig | null>(null);
@@ -716,7 +727,7 @@ export function PublicDashboard() {
   const missingXpLabel = formatFixed2(xpRemainingHundredths);
   const requiredMindLabel = levelUpCostTokens != null ? `${levelUpCostTokens}` : "0";
   const maxLevel = userLevel >= LEVEL_CAP || nextLevelXp == null;
-  const levelUpDisabled = !canLevelUp || busy != null || maxLevel;
+  const levelUpDisabled = !canTransact || !canLevelUp || busy != null || maxLevel;
   const levelUpButtonLabel = maxLevel
     ? "Max level reached"
     : canLevelUp
@@ -1611,15 +1622,14 @@ export function PublicDashboard() {
     });
   };
 
-  const buyDisabled = !publicKey || !config || Boolean(busy);
+  const buyDisabled = !canTransact || !config || Boolean(busy);
   const stakeDisabled =
-    !publicKey || !config || !mintDecimals || Boolean(busy) || stakeAmountUi.trim() === "";
+    !canTransact || !config || !mintDecimals || Boolean(busy) || stakeAmountUi.trim() === "";
   const unstakeDisabled =
-    !publicKey || !config || !mintDecimals || Boolean(busy) || unstakeAmountUi.trim() === "";
-  const claimDisabled = !publicKey || !config || Boolean(busy);
+    !canTransact || !config || !mintDecimals || Boolean(busy) || unstakeAmountUi.trim() === "";
+  const claimDisabled = !canTransact || !config || Boolean(busy);
   const claimSplitDisabled =
-    !publicKey ||
-    !anchorWallet ||
+    !canTransact ||
     !config ||
     Boolean(busy) ||
     finalPendingXnt === 0n ||
@@ -1644,19 +1654,23 @@ export function PublicDashboard() {
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Card className="p-4">
-              <div className="text-3xl font-semibold text-white">{hpFinalLabel} HP</div>
+              <div className="text-3xl font-semibold text-white" data-testid="your-hp">
+                {hpFinalLabel} HP
+              </div>
               <div className="mt-2 text-[10px] uppercase tracking-[0.2em] text-zinc-400">Your HP</div>
               <div className="mt-3 space-y-1 text-[11px] text-zinc-400">
                 <div className="flex items-center justify-between">
                   <span>Base HP</span>
-                  <span className="text-zinc-200">{baseHpLabel}</span>
+                  <span className="text-zinc-200" data-testid="your-base-hp">
+                    {baseHpLabel}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="inline-flex items-center gap-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
                     Rig buffs
                   </span>
-                  <span className="text-emerald-200">
+                  <span className="text-emerald-200" data-testid="your-rig-buffs">
                     +{rigBuffBonusLabel} HP (+{rigBuffPct.toFixed(1)}%)
                   </span>
                 </div>
@@ -1665,7 +1679,7 @@ export function PublicDashboard() {
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
                     Account bonus
                   </span>
-                  <span className="text-emerald-200">
+                  <span className="text-emerald-200" data-testid="your-account-bonus">
                     +{accountBonusLabel} HP (+{accountBonusPct.toFixed(1)}%)
                   </span>
                 </div>
@@ -1689,21 +1703,23 @@ export function PublicDashboard() {
               </div>
             </Card>
             <Card className="p-4">
-              <div className="text-3xl font-semibold text-white">
+              <div className="text-3xl font-semibold text-white" data-testid="network-hp">
                 {formatFixed2(networkHpHundredths)} HP
               </div>
               <div className="mt-2 text-[10px] uppercase tracking-[0.2em] text-zinc-400">Network HP</div>
               <div className="mt-3 space-y-1 text-[11px] text-zinc-400">
                 <div className="flex items-center justify-between">
                   <span>Base HP</span>
-                  <span className="text-zinc-200">{hasNetworkBreakdown ? networkBaseHpLabel : "-"}</span>
+                  <span className="text-zinc-200" data-testid="network-base-hp">
+                    {hasNetworkBreakdown ? networkBaseHpLabel : "-"}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="inline-flex items-center gap-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
                     Rig buffs
                   </span>
-                  <span className="text-emerald-200">
+                  <span className="text-emerald-200" data-testid="network-rig-buffs">
                     {hasNetworkBreakdown
                       ? `+${networkRigBuffBonusLabel} HP (+${networkRigBuffPct.toFixed(1)}%)`
                       : "-"}
@@ -1714,7 +1730,7 @@ export function PublicDashboard() {
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
                     Account bonus
                   </span>
-                  <span className="text-emerald-200">
+                  <span className="text-emerald-200" data-testid="network-account-bonus">
                     {hasNetworkBreakdown
                       ? `+${networkAccountBonusLabel} HP (+${networkAccountBonusPct.toFixed(1)}%)`
                       : "-"}
@@ -1730,6 +1746,7 @@ export function PublicDashboard() {
                   onClick={() => setShowShareFull((prev) => !prev)}
                   title={`${shareTooltip} Click to toggle precision.`}
                   className="text-3xl font-semibold text-white transition hover:text-cyan-200 focus:outline-none"
+                  data-testid="your-share"
                 >
                   {showShareFull ? sharePctFull.toFixed(4) : sharePct.toFixed(2)}
                 </button>
