@@ -868,7 +868,7 @@ export function PublicDashboard() {
   const activePositions = useMemo(
     () =>
       positions.filter(
-        (p) => !p.data.deactivated && !p.data.expired && nowTs != null && nowTs < p.data.endTs
+        (p) => !p.data.deactivated && nowTs != null && nowTs < p.data.endTs
       ),
     [positions, nowTs]
   );
@@ -1662,7 +1662,7 @@ export function PublicDashboard() {
       return;
     }
     const activePositions = positions.filter(
-      (entry) => !entry.data.deactivated && !entry.data.expired && nowTs != null && nowTs < entry.data.endTs
+      (entry) => !entry.data.deactivated && nowTs != null && nowTs < entry.data.endTs
     );
     if (activePositions.length === 0) {
       setError("No active rigs found for leveling up.");
