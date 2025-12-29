@@ -140,6 +140,24 @@ export function AdminDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [criticalBlocked, setCriticalBlocked] = useState(false);
 
+  useEffect(() => {
+    let active = true;
+    const loadConfig = async () => {
+      try {
+        const cfg = await fetchConfig(connection);
+        if (!active) return;
+        setConfig(cfg);
+      } catch {
+        if (!active) return;
+        setConfig(null);
+      }
+    };
+    void loadConfig();
+    return () => {
+      active = false;
+    };
+  }, [connection]);
+
   const stakingEpochBalances = useMemo(() => {
     if (!config) return null;
     const unaccounted =
@@ -350,11 +368,18 @@ export function AdminDashboard() {
     }
   }, [connection]);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  const isAdmin = useMemo(() => {
+    if (!publicKey || !config) return false;
+    return publicKey.equals(config.admin);
+  }, [publicKey, config]);
 
   useEffect(() => {
+    if (!isAdmin) return;
+    void refresh();
+  }, [refresh, isAdmin]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
     let active = true;
     const loadAlerts = async () => {
       try {
@@ -376,12 +401,20 @@ export function AdminDashboard() {
       active = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [isAdmin]);
 
-  const isAdmin = useMemo(() => {
-    if (!publicKey || !config) return false;
-    return publicKey.equals(config.admin);
-  }, [publicKey, config]);
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-ink text-white">
+        <TopBar link={{ href: "/", label: "Dashboard" }} />
+        <main className="mx-auto max-w-6xl px-4 pb-20 pt-10">
+          <Card className="mt-6 p-4 text-sm text-zinc-400">
+            Connect with the admin wallet to access this dashboard.
+          </Card>
+        </main>
+      </div>
+    );
+  }
 
   const mapTxAction = (label: string) => {
     switch (label) {

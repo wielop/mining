@@ -150,10 +150,14 @@ export function AdminDataDashboard() {
   }, [connection, publicKey]);
 
   useEffect(() => {
+    if (!isAdmin) {
+      setState(null);
+      return;
+    }
     void fetchState();
     const interval = setInterval(fetchState, 30_000);
     return () => clearInterval(interval);
-  }, [fetchState]);
+  }, [fetchState, isAdmin]);
 
   const selectedFlow = useMemo(
     () => state?.flows.find((item) => item.window === window) ?? null,
@@ -186,18 +190,25 @@ export function AdminDataDashboard() {
     }
   };
 
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-ink text-white">
+        <TopBar link={{ href: "/", label: "Dashboard" }} />
+        <main className="mx-auto max-w-6xl px-4 pb-20 pt-10">
+          <Card className="mt-6 p-4 text-sm text-zinc-400">
+            Connect with the admin wallet to view the Data Center.
+          </Card>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-ink text-white">
       <TopBar link={{ href: "/", label: "Dashboard" }} />
 
       <main className="mx-auto max-w-6xl px-4 pb-20 pt-10">
         <AdminNav active="data" isAdmin={isAdmin} />
-
-        {!isAdmin ? (
-          <Card className="mt-6 p-4 text-sm text-zinc-400">
-            Connect with the admin wallet to view the Data Center.
-          </Card>
-        ) : null}
 
         {state ? (
           <>
