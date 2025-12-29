@@ -121,6 +121,16 @@ function formatFixed2(valueHundredths: bigint) {
   return `${formatIntegerBig(whole)}.${frac.toString().padStart(2, "0")}`;
 }
 
+function formatBonusHp(valueHundredths: bigint) {
+  const abs = valueHundredths < 0n ? -valueHundredths : valueHundredths;
+  const whole = abs / 100n;
+  const frac = abs % 100n;
+  if (frac === 0n) {
+    return formatIntegerBig(whole);
+  }
+  return `${formatIntegerBig(whole)}.${frac.toString().padStart(2, "0")}`;
+}
+
 function formatRoundedToken(amountBase: bigint, decimals: number, digits = 2) {
   const full = formatTokenAmount(amountBase, decimals, Math.max(decimals, digits));
   const numeric = Number(full);
@@ -654,6 +664,11 @@ export function PublicDashboard() {
       BPS_DENOMINATOR
     );
   }, [buffedUserHpHundredths, levelBonusBpsBig]);
+  const bonusHpHundredths =
+    effectiveUserHpHundredths > buffedUserHpHundredths
+      ? effectiveUserHpHundredths - buffedUserHpHundredths
+      : 0n;
+  const bonusHpLabel = bonusHpHundredths > 0n ? formatBonusHp(bonusHpHundredths) : null;
   const networkHp = config?.networkHpActive ?? 0n;
   const networkHpHundredths = useMemo(() => networkHp, [networkHp]);
   const sharePct =
@@ -1489,8 +1504,29 @@ export function PublicDashboard() {
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Card className="p-4">
-              <div className="text-3xl font-semibold text-white">
-                <span>{formatFixed2(effectiveUserHpHundredths)} HP</span>
+              <div className="flex flex-wrap items-baseline gap-2">
+                <span className="text-3xl font-semibold text-white">
+                  {formatFixed2(effectiveUserHpHundredths)} HP
+                </span>
+                {bonusHpLabel ? (
+                  <span className="inline-flex items-center gap-1 text-sm font-semibold text-emerald-300">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="h-3.5 w-3.5"
+                      aria-hidden="true"
+                    >
+                      <path d="M12 19V5" />
+                      <path d="m5 12 7-7 7 7" />
+                    </svg>
+                    (+{bonusHpLabel})
+                  </span>
+                ) : null}
               </div>
               <div className="mt-2 text-[10px] uppercase tracking-[0.2em] text-zinc-400">Your HP</div>
             </Card>
