@@ -29,4 +29,4 @@ Staking / epochs
 - Cron: off-chain bot to call roll_epoch every 24h
 
 Code changes required before mainnet
-- UNSTAKE_BURN_BPS: set to 8% (applied on testnet; redeploy on mainnet needed)
+- UNSTAKE_BURN_BPS: set to 6% (applied on testnet; redeploy on mainnet needed)

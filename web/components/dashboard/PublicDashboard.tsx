@@ -2404,7 +2404,7 @@ export function PublicDashboard() {
                 {busy === "Unstake MIND" ? "Submitting..." : "Unstake"}
               </Button>
               <div className="mt-2 text-[11px] text-zinc-500">
-                3% of unstaked MIND will be burned.
+                6% of unstaked MIND will be burned.
               </div>
               <div className="text-[11px] text-zinc-500">
                 This helps stabilize rewards and discourage rapid in-out cycles.

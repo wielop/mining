@@ -106,7 +106,7 @@ export function HowItWorksPopover() {
                 <ul className="mt-1 list-disc space-y-1 pl-4 text-zinc-300">
                   <li>You can unstake MIND whenever you want.</li>
                   <li>
-                    3% of unstaked MIND is burned – this helps stabilize rewards and discourages rapid in-out cycles.
+                    6% of unstaked MIND is burned – this helps stabilize rewards and discourages rapid in-out cycles.
                   </li>
                 </ul>
               </div>
