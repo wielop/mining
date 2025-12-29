@@ -24,7 +24,7 @@ test("network HP breakdown matches on-chain", async ({ page, request }) => {
   const accountBonus =
     networkHp > baseHp + rigBuffHp ? networkHp - baseHp - rigBuffHp : 0n;
 
-  await page.goto("/");
+  await page.goto("/e2e");
   await expect(page.getByTestId("network-hp")).toContainText("HP");
   await expect(page.getByTestId("network-base-hp")).not.toHaveText("-");
 

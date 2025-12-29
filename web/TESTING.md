@@ -21,5 +21,5 @@ yarn test:e2e
 ```
 
 ### Notes
-- Append `?view=<WALLET_PUBKEY>` to the URL to view a wallet in read-only mode.
+- Use `/e2e?view=<WALLET_PUBKEY>` to view a wallet in read-only mode.
 - `E2E_WALLET` is used by tests to compute on-chain expectations.
