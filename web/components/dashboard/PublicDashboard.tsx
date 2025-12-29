@@ -1642,7 +1642,10 @@ export function PublicDashboard() {
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Account bonus</span>
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
+                    Account bonus
+                  </span>
                   <span className="text-emerald-200">
                     +{accountBonusLabel} HP (+{accountBonusPct.toFixed(1)}%)
                   </span>
