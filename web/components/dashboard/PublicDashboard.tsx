@@ -59,7 +59,6 @@ const ACC_SCALE = 1_000_000_000_000_000_000n;
 const AUTO_CLAIM_INTERVAL_MS = 15_000;
 const NETWORK_BREAKDOWN_REFRESH_MS = 60_000;
 const BPS_DENOMINATOR = 10_000n;
-const RIG_BUFF_COST_BPS = 150n;
 const RIG_BUFF_CAP_BPS = 850n;
 const RIPPER_FEE_BPS = 20n;
 const BADGE_BONUS_CAP_BPS = 2_000n;
@@ -2066,7 +2065,6 @@ export function PublicDashboard() {
                     inGrace || (remaining != null && remaining <= renewWindowSeconds);
                   const showRenew = canRenewStandard || canRenewWithBuff;
                   const contractMeta = CONTRACTS[rigType] ?? CONTRACTS[0];
-                  const baseHpScaled = BigInt(Math.round(contractMeta.hp * 100));
                   const renewCountdownLabel =
                     graceLeftLabel != null ? `Renew • ${graceLeftLabel} left` : "Renew";
                   const maxBuffLevel = rigMaxBuffLevel(rigType);
@@ -2087,21 +2085,6 @@ export function PublicDashboard() {
                   const hpNextWithUpgrade =
                     (BASE_HP_BY_TYPE[rigKind] ?? 0) * (10_000 + buffBpsNext) / 10_000;
                   const hpNextWithLabel = formatFixed2Number(hpNextWithUpgrade);
-                  const rewardBase =
-                    rigBuffConfig && mintDecimals
-                      ? (baseHpScaled *
-                          rigBuffConfig.mindPerHpPerDay *
-                          BigInt(contractMeta.durationDays)) /
-                        HP_SCALE
-                      : null;
-                  const buffCostBase =
-                    rewardBase != null
-                      ? (rewardBase * RIG_BUFF_COST_BPS) / BPS_DENOMINATOR
-                      : null;
-                  const buffCostLabel =
-                    buffCostBase != null && mintDecimals
-                      ? formatRoundedToken(buffCostBase, mintDecimals.mind, 2)
-                      : "-";
                   const mindPerHpPerDayUi =
                     rigBuffConfig && mintDecimals
                       ? Number(
@@ -2276,7 +2259,6 @@ export function PublicDashboard() {
                                 HP next cycle: {hpNextWithoutLabel} → {hpNextWithLabel}
                               </div>
                               <div>Extra yield (est.): +{extraYieldLabel} MIND / cycle</div>
-                              <div>Cost: {buffCostLabel} MIND</div>
                             </div>
                           ) : (
                             <div className="mt-3 text-[11px] text-zinc-500">
