@@ -1191,8 +1191,6 @@ export function PublicDashboard() {
         return "claim_xnt_rxnt";
       case "Level up":
         return "level_up";
-      case "Renew rig":
-        return "renew_rig";
       case "Renew with buff":
         return "renew_rig_with_buff";
       default:
@@ -1321,27 +1319,6 @@ export function PublicDashboard() {
       }
     }
   }, [config, connection, nowTs, onClaimAll, publicKey]);
-  const onRenew = async (posPubkey: string) => {
-    if (busy != null) return;
-    if (!anchorWallet || !config || !publicKey) return;
-    const program = getProgram(connection, anchorWallet);
-    await withTx("Renew rig", async () => {
-      const sig = await program.methods
-        .renewRig()
-        .accounts({
-          owner: publicKey,
-          config: deriveConfigPda(),
-          userProfile: deriveUserProfilePda(publicKey),
-          position: new PublicKey(posPubkey),
-          stakingRewardVault: config.stakingRewardVault,
-          treasuryVault: config.treasuryVault,
-          systemProgram: SystemProgram.programId,
-        })
-        .rpc();
-      return sig;
-    });
-  };
-
   const onRenewWithBuff = async (posPubkey: string) => {
     if (busy != null) return;
     if (!anchorWallet || !config || !publicKey || !rigBuffConfig) return;
@@ -2022,8 +1999,6 @@ export function PublicDashboard() {
                     inGrace || (remaining != null && remaining <= renewWindowSeconds);
                   const showRenew = canRenewStandard || canRenewWithBuff;
                   const contractMeta = CONTRACTS[rigType] ?? CONTRACTS[0];
-                  const renewCountdownLabel =
-                    graceLeftLabel != null ? `Renew • ${graceLeftLabel} left` : "Renew";
                   const maxBuffLevel = rigMaxBuffLevel(rigType);
                   const nextBuffLevel =
                     p.data.buffLevel < maxBuffLevel ? p.data.buffLevel + 1 : p.data.buffLevel;
@@ -2076,10 +2051,14 @@ export function PublicDashboard() {
                           return `L${level} +${pct}%`;
                         }).join(" • ")
                       : null;
+                  const buffCountdownLabel =
+                    graceLeftLabel != null ? `${graceLeftLabel} left` : null;
                   const buffButtonLabel = rigBuffCapReached
                     ? "Buff cap reached"
                     : hasNextBuffLevel
-                    ? `Renew + Buff${buffIncreaseLabel ? ` (${buffIncreaseLabel})` : ""}`
+                    ? `Renew + Buff${
+                        buffIncreaseLabel ? ` (${buffIncreaseLabel})` : ""
+                      }${buffCountdownLabel ? ` • ${buffCountdownLabel}` : ""}`
                     : "Max buff reached";
                   const buffDisabled =
                     busy != null ||
@@ -2205,17 +2184,6 @@ export function PublicDashboard() {
                             </div>
                           ) : null}
                           <div className="mt-3 grid gap-2">
-                            {canRenewStandard ? (
-                              <Button
-                                size="sm"
-                                className="w-full ring-1 ring-amber-400/40 shadow-[0_0_12px_rgba(251,191,36,0.35)]"
-                                onClick={() => void onRenew(p.pubkey)}
-                                disabled={busy != null}
-                                title="Renew without increasing buff level."
-                              >
-                                {busy === "Renew rig" ? "Submitting..." : renewCountdownLabel}
-                              </Button>
-                            ) : null}
                             <Button
                               size="sm"
                               className="w-full"
