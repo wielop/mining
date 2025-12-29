@@ -57,6 +57,7 @@ import {
 
 const ACC_SCALE = 1_000_000_000_000_000_000n;
 const AUTO_CLAIM_INTERVAL_MS = 15_000;
+const NETWORK_BREAKDOWN_REFRESH_MS = 60_000;
 const BPS_DENOMINATOR = 10_000n;
 const RIG_BUFF_COST_BPS = 150n;
 const RIG_BUFF_CAP_BPS = 850n;
@@ -95,6 +96,22 @@ interface RigPosition {
 interface AccountLevelInfo {
   levelBonusBps: number;
 }
+
+type NetworkHpBreakdownResponse = {
+  baseHp: string;
+  rigBuffHp: string;
+  accountBonusHp: string;
+  effectiveHp: string;
+  updatedAt: string;
+};
+
+type NetworkHpBreakdown = {
+  baseHp: bigint;
+  rigBuffHp: bigint;
+  accountBonusHp: bigint;
+  effectiveHp: bigint;
+  updatedAt: string;
+};
 
 function rigTypeFromDuration(startTs: number, endTs: number, secondsPerDay: number) {
   if (!Number.isFinite(secondsPerDay) || secondsPerDay <= 0) return 0;
@@ -260,6 +277,7 @@ export function PublicDashboard() {
   const [networkTrend, setNetworkTrend] = useState<{ delta: bigint; pct: number } | null>(null);
   const [activeMinerTotal, setActiveMinerTotal] = useState(0);
   const [activeRigTotal, setActiveRigTotal] = useState(0);
+  const [networkBreakdown, setNetworkBreakdown] = useState<NetworkHpBreakdown | null>(null);
 
   const [selectedContract, setSelectedContract] = useState<number>(1);
   const [stakeAmountUi, setStakeAmountUi] = useState<string>("");
@@ -523,6 +541,43 @@ export function PublicDashboard() {
   }, [refresh]);
 
   useEffect(() => {
+    let active = true;
+    const loadBreakdown = async () => {
+      try {
+        const res = await fetch("/api/network/hp-breakdown", { cache: "no-store" });
+        if (!res.ok) return;
+        const data = (await res.json()) as Partial<NetworkHpBreakdownResponse>;
+        if (!active) return;
+        if (
+          typeof data.baseHp !== "string" ||
+          typeof data.rigBuffHp !== "string" ||
+          typeof data.accountBonusHp !== "string" ||
+          typeof data.effectiveHp !== "string"
+        ) {
+          return;
+        }
+        setNetworkBreakdown({
+          baseHp: BigInt(data.baseHp),
+          rigBuffHp: BigInt(data.rigBuffHp),
+          accountBonusHp: BigInt(data.accountBonusHp),
+          effectiveHp: BigInt(data.effectiveHp),
+          updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : new Date().toISOString(),
+        });
+      } catch (err) {
+        if (active) {
+          console.warn("Failed to load network HP breakdown", err);
+        }
+      }
+    };
+    void loadBreakdown();
+    const id = window.setInterval(() => void loadBreakdown(), NETWORK_BREAKDOWN_REFRESH_MS);
+    return () => {
+      active = false;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!publicKey || typeof window === "undefined") {
       setLastClaimAmount(null);
       setLastClaimTs(null);
@@ -744,6 +799,22 @@ export function PublicDashboard() {
   }, [buffedUserHpHundredths, levelBonusBpsBig]);
   const networkHp = config?.networkHpActive ?? 0n;
   const networkHpHundredths = useMemo(() => networkHp, [networkHp]);
+  const hasNetworkBreakdown = networkBreakdown != null;
+  const networkBaseHpHundredths = networkBreakdown?.baseHp ?? 0n;
+  const networkRigBuffBonusHundredths = networkBreakdown?.rigBuffHp ?? 0n;
+  const networkAccountBonusHundredths = networkBreakdown?.accountBonusHp ?? 0n;
+  const networkBuffedHpHundredths = networkBaseHpHundredths + networkRigBuffBonusHundredths;
+  const networkRigBuffPct =
+    networkBaseHpHundredths > 0n
+      ? Number((networkRigBuffBonusHundredths * 10_000n) / networkBaseHpHundredths) / 100
+      : 0;
+  const networkAccountBonusPct =
+    networkBuffedHpHundredths > 0n
+      ? Number((networkAccountBonusHundredths * 10_000n) / networkBuffedHpHundredths) / 100
+      : 0;
+  const networkBaseHpLabel = formatFixed2(networkBaseHpHundredths);
+  const networkRigBuffBonusLabel = formatFixed2(networkRigBuffBonusHundredths);
+  const networkAccountBonusLabel = formatFixed2(networkAccountBonusHundredths);
   const sharePct =
     networkHpHundredths > 0n
       ? Number((effectiveUserHpHundredths * 10_000n) / networkHpHundredths) / 100
@@ -1674,6 +1745,34 @@ export function PublicDashboard() {
                 {formatFixed2(networkHpHundredths)} HP
               </div>
               <div className="mt-2 text-[10px] uppercase tracking-[0.2em] text-zinc-400">Network HP</div>
+              <div className="mt-3 space-y-1 text-[11px] text-zinc-400">
+                <div className="flex items-center justify-between">
+                  <span>Base HP</span>
+                  <span className="text-zinc-200">{hasNetworkBreakdown ? networkBaseHpLabel : "-"}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
+                    Rig buffs
+                  </span>
+                  <span className="text-emerald-200">
+                    {hasNetworkBreakdown
+                      ? `+${networkRigBuffBonusLabel} HP (+${networkRigBuffPct.toFixed(1)}%)`
+                      : "-"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
+                    Account bonus
+                  </span>
+                  <span className="text-emerald-200">
+                    {hasNetworkBreakdown
+                      ? `+${networkAccountBonusLabel} HP (+${networkAccountBonusPct.toFixed(1)}%)`
+                      : "-"}
+                  </span>
+                </div>
+              </div>
             </Card>
             <Card className="p-4">
               <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Your share</div>
