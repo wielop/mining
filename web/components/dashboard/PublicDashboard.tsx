@@ -2127,6 +2127,15 @@ export function PublicDashboard() {
                     maxBuffLevel > 0
                       ? Math.min(100, (p.data.buffLevel / maxBuffLevel) * 100)
                       : 0;
+                  const buffLevelBreakdown =
+                    maxBuffLevel > 0
+                      ? Array.from({ length: maxBuffLevel }, (_, idx) => {
+                          const level = idx + 1;
+                          const bps = rigBuffBps(rigType, level);
+                          const pct = (bps / 100).toFixed(1);
+                          return `L${level} +${pct}%`;
+                        }).join(" • ")
+                      : null;
                   const buffButtonLabel = rigBuffCapReached
                     ? "Buff cap reached"
                     : hasNextBuffLevel
@@ -2178,14 +2187,19 @@ export function PublicDashboard() {
                                 L{p.data.buffLevel} / L{maxBuffLevel}
                               </span>
                             </div>
-                            <div className="mt-1 h-1 rounded-full bg-white/10">
-                              <div
-                                className="h-1 rounded-full bg-cyan-300/70"
-                                style={{ width: `${buffLevelProgress}%` }}
-                              />
-                            </div>
+                          <div className="mt-1 h-1 rounded-full bg-white/10">
+                            <div
+                              className="h-1 rounded-full bg-cyan-300/70"
+                              style={{ width: `${buffLevelProgress}%` }}
+                            />
                           </div>
-                        ) : null}
+                          {buffLevelBreakdown ? (
+                            <div className="mt-2 text-[10px] uppercase tracking-[0.2em] text-zinc-600">
+                              {buffLevelBreakdown}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
                       </div>
                       <div className={`mt-2 text-xs ${timeClass}`} title={expiryTooltip}>
                         {timeLine}
