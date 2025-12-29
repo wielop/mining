@@ -830,73 +830,27 @@ export function PublicDashboard() {
   const statusAccentClass = networkHp > 0n ? "text-emerald-300" : "text-amber-300";
   const secondsPerDayUi = config && Number(config.secondsPerDay) > 0 ? Number(config.secondsPerDay) : 86_400;
   const renewWindowSeconds = secondsPerDayUi * RENEW_REMINDER_DAYS;
-  const rigBuffSummary = useMemo(() => {
-    if (activePositions.length === 0) {
-      if (baseUserHpHundredths > 0n) {
-        const hpBaseTotal = Number(baseUserHpHundredths) / 100;
-        const hpWithRigBuffsTotal = Number(buffedUserHpHundredths) / 100;
-        const hpFinal = Number(effectiveUserHpHundredths) / 100;
-        const rigBuffRatio = hpBaseTotal > 0 ? hpWithRigBuffsTotal / hpBaseTotal - 1 : 0;
-        return { hpBaseTotal, hpWithRigBuffsTotal, hpFinal, rigBuffRatio };
-      }
-      return {
-        hpBaseTotal: 0,
-        hpWithRigBuffsTotal: 0,
-        hpFinal: 0,
-        rigBuffRatio: 0,
-      };
-    }
-    if (nowTs == null) {
-      return {
-        hpBaseTotal: 0,
-        hpWithRigBuffsTotal: 0,
-        hpFinal: 0,
-        rigBuffRatio: 0,
-      };
-    }
-    let hpBaseTotal = 0;
-    let hpWithRigBuffsTotal = 0;
-    for (const entry of activePositions) {
-      const rigType = entry.data.hpScaled
-        ? entry.data.rigType
-        : rigTypeFromDuration(entry.data.startTs, entry.data.endTs, secondsPerDayUi);
-      const rigPosition: RigPosition = {
-        type: rigTypeKey(rigType),
-        buffLevel: entry.data.buffLevel,
-        buffAppliedFromCycle: Number(entry.data.buffAppliedFromCycle),
-        expiresAtTs: entry.data.endTs,
-      };
-      hpBaseTotal += BASE_HP_BY_TYPE[rigPosition.type] ?? 0;
-      hpWithRigBuffsTotal += getRigEffectiveHpNow(rigPosition, nowTs);
-    }
-    const rigBuffRatio = hpBaseTotal > 0 ? hpWithRigBuffsTotal / hpBaseTotal - 1 : 0;
-    const hpFinal = hpWithRigBuffsTotal * (1 + levelBonusBps / 10_000);
-    return { hpBaseTotal, hpWithRigBuffsTotal, hpFinal, rigBuffRatio };
-  }, [
-    activePositions,
-    baseUserHpHundredths,
-    buffedUserHpHundredths,
-    effectiveUserHpHundredths,
-    levelBonusBps,
-    nowTs,
-    secondsPerDayUi,
-  ]);
-  const rigBuffBonusHp = Math.max(0, rigBuffSummary.hpWithRigBuffsTotal - rigBuffSummary.hpBaseTotal);
-  const accountBonusHp = Math.max(0, rigBuffSummary.hpFinal - rigBuffSummary.hpWithRigBuffsTotal);
-  const rigBuffPct =
-    rigBuffSummary.hpBaseTotal > 0
-      ? (rigBuffBonusHp / rigBuffSummary.hpBaseTotal) * 100
+  const baseHpTotal = Number(baseUserHpHundredths) / 100;
+  const hpWithRigBuffsTotal = Number(buffedUserHpHundredths) / 100;
+  const hpFinal = Number(effectiveUserHpHundredths) / 100;
+  const rigBuffRatio =
+    baseUserHpHundredths > 0n
+      ? Number((buffedUserHpHundredths - baseUserHpHundredths) * 10_000n / baseUserHpHundredths) /
+        10_000
       : 0;
+  const rigBuffBonusHp = Math.max(0, hpWithRigBuffsTotal - baseHpTotal);
+  const accountBonusHp = Math.max(0, hpFinal - hpWithRigBuffsTotal);
+  const rigBuffPct = rigBuffRatio * 100;
   const accountBonusPct = levelBonusBps / 100;
   const rigBuffCapRatio = Number(RIG_BUFF_CAP_BPS) / 10_000;
   const rigBuffCapPct = Number(RIG_BUFF_CAP_BPS) / 100;
   const rigBuffCapProgress =
     rigBuffCapRatio > 0
-      ? Math.min(100, Math.max(0, (rigBuffSummary.rigBuffRatio / rigBuffCapRatio) * 100))
+      ? Math.min(100, Math.max(0, (rigBuffRatio / rigBuffCapRatio) * 100))
       : 0;
-  const rigBuffCapReached = rigBuffSummary.rigBuffRatio >= rigBuffCapRatio;
-  const hpFinalLabel = formatFixed2Number(rigBuffSummary.hpFinal);
-  const baseHpLabel = formatFixed2Number(rigBuffSummary.hpBaseTotal);
+  const rigBuffCapReached = rigBuffRatio >= rigBuffCapRatio;
+  const hpFinalLabel = formatFixed2Number(hpFinal);
+  const baseHpLabel = formatFixed2Number(baseHpTotal);
   const rigBuffBonusLabel = formatFixed2Number(rigBuffBonusHp);
   const accountBonusLabel = formatFixed2Number(accountBonusHp);
   const graceSeconds = secondsPerDayUi * GRACE_DAYS;
