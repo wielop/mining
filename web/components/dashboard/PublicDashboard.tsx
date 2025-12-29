@@ -746,7 +746,22 @@ export function PublicDashboard() {
   const statusAccentClass = networkHp > 0n ? "text-emerald-300" : "text-amber-300";
   const secondsPerDayUi = config && Number(config.secondsPerDay) > 0 ? Number(config.secondsPerDay) : 86_400;
   const rigBuffSummary = useMemo(() => {
-    if (nowTs == null || activePositions.length === 0) {
+    if (activePositions.length === 0) {
+      if (baseUserHpHundredths > 0n) {
+        const hpBaseTotal = Number(baseUserHpHundredths) / 100;
+        const hpWithRigBuffsTotal = Number(buffedUserHpHundredths) / 100;
+        const hpFinal = Number(effectiveUserHpHundredths) / 100;
+        const rigBuffRatio = hpBaseTotal > 0 ? hpWithRigBuffsTotal / hpBaseTotal - 1 : 0;
+        return { hpBaseTotal, hpWithRigBuffsTotal, hpFinal, rigBuffRatio };
+      }
+      return {
+        hpBaseTotal: 0,
+        hpWithRigBuffsTotal: 0,
+        hpFinal: 0,
+        rigBuffRatio: 0,
+      };
+    }
+    if (nowTs == null) {
       return {
         hpBaseTotal: 0,
         hpWithRigBuffsTotal: 0,
@@ -772,7 +787,15 @@ export function PublicDashboard() {
     const rigBuffRatio = hpBaseTotal > 0 ? hpWithRigBuffsTotal / hpBaseTotal - 1 : 0;
     const hpFinal = hpWithRigBuffsTotal * (1 + levelBonusBps / 10_000);
     return { hpBaseTotal, hpWithRigBuffsTotal, hpFinal, rigBuffRatio };
-  }, [activePositions, levelBonusBps, nowTs, secondsPerDayUi]);
+  }, [
+    activePositions,
+    baseUserHpHundredths,
+    buffedUserHpHundredths,
+    effectiveUserHpHundredths,
+    levelBonusBps,
+    nowTs,
+    secondsPerDayUi,
+  ]);
   const rigBuffBonusHp = Math.max(0, rigBuffSummary.hpWithRigBuffsTotal - rigBuffSummary.hpBaseTotal);
   const accountBonusHp = Math.max(0, rigBuffSummary.hpFinal - rigBuffSummary.hpWithRigBuffsTotal);
   const rigBuffPct =
