@@ -1645,10 +1645,10 @@ export function PublicDashboard() {
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Card className="p-4">
-              <div className="text-3xl font-semibold text-white" data-testid="your-hp">
+              <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-400">Your HP</div>
+              <div className="mt-2 text-3xl font-semibold text-white" data-testid="your-hp">
                 {hpFinalLabel} HP
               </div>
-              <div className="mt-2 text-[10px] uppercase tracking-[0.2em] text-zinc-400">Your HP</div>
               <div className="mt-3 space-y-1 text-[11px] text-zinc-400">
                 <div className="flex items-center justify-between">
                   <span>Base HP</span>
@@ -1694,10 +1694,10 @@ export function PublicDashboard() {
               </div>
             </Card>
             <Card className="p-4">
-              <div className="text-3xl font-semibold text-white" data-testid="network-hp">
+              <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-400">Network HP</div>
+              <div className="mt-2 text-3xl font-semibold text-white" data-testid="network-hp">
                 {formatFixed2(networkHpHundredths)} HP
               </div>
-              <div className="mt-2 text-[10px] uppercase tracking-[0.2em] text-zinc-400">Network HP</div>
               <div className="mt-3 space-y-1 text-[11px] text-zinc-400">
                 <div className="flex items-center justify-between">
                   <span>Base HP</span>
