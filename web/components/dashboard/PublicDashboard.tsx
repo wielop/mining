@@ -71,7 +71,6 @@ const XNT_DECIMALS = 9;
 const NATIVE_VAULT_SPACE = 9;
 const HP_SCALE = 100n;
 const GRACE_DAYS = 2;
-const RENEW_REMINDER_DAYS = 3;
 const CONTRACTS = [
   { key: 0, label: "Starter Rig", durationDays: 7, costXnt: 1, hp: 0.6 },
   { key: 1, label: "Pro Rig", durationDays: 14, costXnt: 8, hp: 7 },
@@ -760,7 +759,6 @@ export function PublicDashboard() {
       : "Status: Emission paused — no active hashpower";
   const statusAccentClass = networkHp > 0n ? "text-emerald-300" : "text-amber-300";
   const secondsPerDayUi = config && Number(config.secondsPerDay) > 0 ? Number(config.secondsPerDay) : 86_400;
-  const renewWindowSeconds = secondsPerDayUi * RENEW_REMINDER_DAYS;
   const rigBuffSummary = useMemo(() => {
     if (activePositions.length === 0) {
       if (baseUserHpHundredths > 0n) {
@@ -1959,12 +1957,11 @@ export function PublicDashboard() {
                           Number(p.data.buffAppliedFromCycle - BigInt(now))
                         )
                       : null;
-                  const showRenew =
-                    inGrace || (remaining != null && remaining <= renewWindowSeconds);
+                  const showRenew = inGrace;
                   const contractMeta = CONTRACTS[rigType] ?? CONTRACTS[0];
                   const baseHpScaled = BigInt(Math.round(contractMeta.hp * 100));
-                  const canRenewStandard = inGrace || (remaining != null && remaining <= renewWindowSeconds);
-                  const canRenewWithBuff = canRenewStandard;
+                  const canRenewStandard = inGrace;
+                  const canRenewWithBuff = inGrace;
                   const renewCountdownLabel =
                     graceLeftLabel != null ? `Renew • ${graceLeftLabel} left` : "Renew";
                   const maxBuffLevel = rigMaxBuffLevel(rigType);
@@ -2131,7 +2128,7 @@ export function PublicDashboard() {
                               title={
                                 canRenewStandard
                                   ? "Renew without increasing buff level."
-                                  : "Available in the last 3 days or during grace."
+                                  : "Available during the 48h grace period."
                               }
                             >
                               {busy === "Renew rig" ? "Submitting..." : renewCountdownLabel}
@@ -2150,7 +2147,7 @@ export function PublicDashboard() {
                                   ? "Rig buff config is not initialized yet."
                                   : canRenewWithBuff
                                   ? "Applies from the next cycle."
-                                  : "Available in the last 3 days or during grace."
+                                  : "Available during the 48h grace period."
                               }
                             >
                               {busy === "Renew with buff" ? "Submitting..." : buffButtonLabel}
