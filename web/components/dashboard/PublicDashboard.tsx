@@ -813,13 +813,6 @@ export function PublicDashboard() {
   const networkBaseHpLabel = formatFixed2(networkBaseHpHundredths);
   const networkRigBuffBonusLabel = formatFixed2(networkRigBuffBonusHundredths);
   const networkAccountBonusLabel = formatFixed2(networkAccountBonusHundredths);
-  const networkHpUi = networkHpHundredths > 0n ? Number(networkHpHundredths) / 100 : 0;
-  const sharePctRaw =
-    networkHpUi > 0 ? (hpFinal / networkHpUi) * 100 : 0;
-  const sharePct = Number.isFinite(sharePctRaw) ? sharePctRaw : 0;
-  const sharePctFull = sharePct;
-  const shareTooltip =
-    "You receive rewards continuously based on your current share. Your share may change when others join or expire.";
   const miningStatusText =
     networkHp > 0n
       ? "Status: Mining active • • •"
@@ -835,6 +828,12 @@ export function PublicDashboard() {
       ? Number((buffedUserHpHundredths - baseUserHpHundredths) * 10_000n / baseUserHpHundredths) /
         10_000
       : 0;
+  const networkHpUi = networkHpHundredths > 0n ? Number(networkHpHundredths) / 100 : 0;
+  const sharePctRaw = networkHpUi > 0 ? (hpFinal / networkHpUi) * 100 : 0;
+  const sharePct = Number.isFinite(sharePctRaw) ? sharePctRaw : 0;
+  const sharePctFull = sharePct;
+  const shareTooltip =
+    "You receive rewards continuously based on your current share. Your share may change when others join or expire.";
   const rigBuffBonusHp = Math.max(0, hpWithRigBuffsTotal - baseHpTotal);
   const accountBonusHp = Math.max(0, hpFinal - hpWithRigBuffsTotal);
   const rigBuffPct = rigBuffRatio * 100;
