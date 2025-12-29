@@ -2130,6 +2130,26 @@ export function PublicDashboard() {
                     !rigBuffConfig ||
                     !mintDecimals ||
                     !hasNextBuffLevel;
+                  const ratePerHour =
+                    networkHpHundredths > 0n
+                      ? ((config?.emissionPerSec ?? 0n) * 3_600n * positionRateHp) /
+                        networkHpHundredths
+                      : null;
+                  const ratePerDay =
+                    networkHpHundredths > 0n
+                      ? ((config?.emissionPerSec ?? 0n) *
+                          BigInt(secondsPerDayUi) *
+                          positionRateHp) /
+                        networkHpHundredths
+                      : null;
+                  const ratePerCycle =
+                    networkHpHundredths > 0n
+                      ? ((config?.emissionPerSec ?? 0n) *
+                          BigInt(secondsPerDayUi) *
+                          BigInt(contractMeta.durationDays) *
+                          positionRateHp) /
+                        networkHpHundredths
+                      : null;
                   return (
                     <div key={p.pubkey} className="rounded-2xl border border-white/10 bg-white/5 p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2201,13 +2221,19 @@ export function PublicDashboard() {
                           className="mt-2 text-[11px] text-zinc-500"
                           title="Includes rig bonus and account XP bonus."
                         >
-                          {networkHpHundredths > 0n
-                            ? `Current rate: ${formatRoundedToken(
-                                ((config?.emissionPerSec ?? 0n) * 3_600n * positionRateHp) /
-                                  networkHpHundredths,
-                                mintDecimals.mind
-                              )} MIND / h`
-                            : "Rate unavailable"}
+                          {networkHpHundredths > 0n && ratePerHour != null && ratePerDay != null && ratePerCycle != null ? (
+                            <>
+                              <div>
+                                Current rate: {formatRoundedToken(ratePerHour, mintDecimals.mind)} MIND / h
+                              </div>
+                              <div>≈ {formatRoundedToken(ratePerDay, mintDecimals.mind)} MIND / 24h</div>
+                              <div>
+                                ≈ {formatRoundedToken(ratePerCycle, mintDecimals.mind)} MIND / cycle
+                              </div>
+                            </>
+                          ) : (
+                            "Rate unavailable"
+                          )}
                         </div>
                       ) : null}
                       {showRenew ? (
