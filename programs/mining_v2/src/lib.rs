@@ -2706,8 +2706,8 @@ fn contract_terms(contract_type: u8) -> Result<(u64, u64, u64)> {
     let base = XNT_BASE;
     match contract_type {
         0 => Ok((7, 100, base)),
-        1 => Ok((14, 800, base.checked_mul(8).ok_or(ErrorCode::MathOverflow)?)),
-        2 => Ok((28, 1_600, base.checked_mul(16).ok_or(ErrorCode::MathOverflow)?)),
+        1 => Ok((14, 800, base.checked_mul(9).ok_or(ErrorCode::MathOverflow)?)),
+        2 => Ok((28, 1_600, base.checked_mul(24).ok_or(ErrorCode::MathOverflow)?)),
         _ => Err(error!(ErrorCode::InvalidContractType)),
     }
 }

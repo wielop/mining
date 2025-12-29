@@ -97,7 +97,7 @@ const RIG_PLANS: RigPlan[] = [
     label: "Pro Rig",
     durationDays: 14,
     baseHp: 8,
-    costXnt: 8,
+    costXnt: 9,
     maxBuffPercent: 0.035,
   },
   {
@@ -105,7 +105,7 @@ const RIG_PLANS: RigPlan[] = [
     label: "Industrial Rig",
     durationDays: 28,
     baseHp: 16,
-    costXnt: 16,
+    costXnt: 24,
     maxBuffPercent: 0.05,
   },
 ];
