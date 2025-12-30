@@ -126,7 +126,7 @@ export function AdminDashboard() {
   const [activeRigTotal, setActiveRigTotal] = useState(0);
   const [activeMinerUpdated, setActiveMinerUpdated] = useState<number | null>(null);
   const [activeStakers, setActiveStakers] = useState<
-    Array<{ owner: string; staked: bigint; sharePct: number }>
+    Array<{ owner: string; staked: bigint; sharePct: number; predictedDailyXnt: bigint }>
   >([]);
   const [activeStakerTotal, setActiveStakerTotal] = useState(0);
   const [activeStakedTotal, setActiveStakedTotal] = useState<bigint>(0n);
@@ -370,11 +370,14 @@ export function AdminDashboard() {
             totalStaked += decoded.stakedMind;
           }
         }
+        const rewardPerDay = cfg.stakingRewardRateXntPerSec * DAY_SECONDS;
         const stakerList = Array.from(stakerMap.entries())
           .map(([owner, staked]) => {
             const sharePct =
               totalStaked > 0n ? Number((staked * 10_000n) / totalStaked) / 100 : 0;
-            return { owner, staked, sharePct };
+            const predictedDailyXnt =
+              totalStaked > 0n ? (rewardPerDay * staked) / totalStaked : 0n;
+            return { owner, staked, sharePct, predictedDailyXnt };
           })
           .sort((a, b) =>
             b.staked !== a.staked ? (b.staked > a.staked ? 1 : -1) : b.sharePct - a.sharePct
@@ -832,6 +835,12 @@ export function AdminDashboard() {
                     Staked:{" "}
                     {mintDecimals ? formatTokenAmount(entry.staked, mintDecimals.mind, 4) : "-"} MIND
                     {" | "}Share: {entry.sharePct.toFixed(2)}%
+                    {mintDecimals ? (
+                      <>
+                        {" | "}Reward/day:{" "}
+                        {formatTokenAmount(entry.predictedDailyXnt, mintDecimals.xnt, 4)} XNT
+                      </>
+                    ) : null}
                   </div>
                 </div>
               ))
