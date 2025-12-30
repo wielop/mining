@@ -546,10 +546,13 @@ export function AdminDashboard() {
 
   const onRollEpoch = async () => {
     if (!anchorWallet || !config || !publicKey) return;
-    const seconds =
-      config?.secondsPerDay != null
-        ? config.secondsPerDay * STAKING_EPOCH_DAYS
-        : BigInt(epochSecondsUi || "0");
+    let seconds: bigint;
+    try {
+      seconds = BigInt(epochSecondsUi || "0");
+    } catch {
+      setError("Invalid epoch length value");
+      return;
+    }
     if (seconds <= 0n) return;
     const program = getProgram(connection, anchorWallet);
     await withTx("Roll epoch", async () => {
@@ -870,8 +873,8 @@ export function AdminDashboard() {
 
           <Card className="p-4">
             <div className="text-sm font-semibold">Roll staking epoch</div>
-            <div className="mt-3 text-xs text-zinc-400">Epoch length (seconds, fixed 14 days)</div>
-            <Input value={epochSecondsUi} onChange={setEpochSecondsUi} disabled />
+            <div className="mt-3 text-xs text-zinc-400">Epoch length (seconds)</div>
+            <Input value={epochSecondsUi} onChange={setEpochSecondsUi} />
             <Button
               className="mt-4"
               onClick={() => void onRollEpoch()}

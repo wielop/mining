@@ -1157,11 +1157,6 @@ pub mod mining_v2 {
         let now = Clock::get()?.unix_timestamp;
         let cfg = &mut ctx.accounts.config;
         require_keys_eq!(cfg.admin, ctx.accounts.admin.key(), ErrorCode::Unauthorized);
-        let expected = cfg
-            .seconds_per_day
-            .checked_mul(STAKING_EPOCH_DAYS)
-            .ok_or(ErrorCode::MathOverflow)?;
-        require!(epoch_seconds == expected, ErrorCode::InvalidEpochSeconds);
         update_staking_global(cfg, now)?;
 
         let vault_balance = vault_available_lamports(&ctx.accounts.staking_reward_vault)?;

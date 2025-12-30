@@ -51,4 +51,5 @@
 
 ## Staking / epoch
 - `roll_epoch`: admin-only
+- Dlugosc epoki ustawiasz w panelu admina (seconds). Zalecane: `seconds_per_day * 14`.
 - Cron off-chain: uruchamiac `roll_epoch` co 24h
