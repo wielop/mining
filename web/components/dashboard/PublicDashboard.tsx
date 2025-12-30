@@ -2064,45 +2064,6 @@ export function PublicDashboard() {
           </div>
         </div>
 
-        <Card className="mt-8 border-white/10 bg-white/5 p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Leaderboard</div>
-              <div className="mt-1 text-xs text-zinc-500">Sorted by HP, then staked MIND.</div>
-            </div>
-            <Badge variant="muted">Top {leaderboardRows.length}</Badge>
-          </div>
-          <div className="mt-4 max-h-[360px] overflow-y-auto pr-2">
-            <div className="grid grid-cols-[48px_1fr_120px_140px] text-[10px] uppercase tracking-[0.2em] text-zinc-500">
-              <div>#</div>
-              <div>Wallet</div>
-              <div className="text-right">HP</div>
-              <div className="text-right">Staked MIND</div>
-            </div>
-            {leaderboardRows.length === 0 ? (
-              <div className="mt-3 text-xs text-zinc-500">Leaderboard unavailable.</div>
-            ) : (
-              <div className="mt-3 space-y-2">
-                {leaderboardRows.map((row, idx) => (
-                  <div
-                    key={row.owner}
-                    className="grid grid-cols-[48px_1fr_120px_140px] items-center text-xs text-zinc-200"
-                  >
-                    <div className="text-zinc-500">{idx + 1}</div>
-                    <div className="font-mono" title={row.owner}>
-                      {shortPk(row.owner, 4)}
-                    </div>
-                    <div className="text-right text-white">{formatFixed2(row.hp)}</div>
-                    <div className="text-right text-zinc-300">
-                      {mintDecimals ? formatRoundedToken(row.stakedMind, mintDecimals.mind, 2) : "-"}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </Card>
-
         <section className="mt-10 grid gap-6 lg:grid-cols-[2fr_1fr]">
           <Card className="border-cyan-400/20 bg-ink/90 p-6">
             <div className="flex items-center justify-between">
@@ -2997,6 +2958,47 @@ export function PublicDashboard() {
             requirements={levelUpRequirements}
             onLevelUp={onLevelUp}
           />
+        </section>
+
+        <section className="mt-10">
+          <Card className="border-white/10 bg-white/5 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-400">Leaderboard</div>
+                <div className="mt-1 text-xs text-zinc-500">Sorted by HP, then staked MIND.</div>
+              </div>
+              <Badge variant="muted">Top {leaderboardRows.length}</Badge>
+            </div>
+            <div className="mt-4 max-h-[360px] overflow-y-auto pr-2">
+              <div className="grid grid-cols-[48px_1fr_120px_140px] text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+                <div>#</div>
+                <div>Wallet</div>
+                <div className="text-right">HP</div>
+                <div className="text-right">Staked MIND</div>
+              </div>
+              {leaderboardRows.length === 0 ? (
+                <div className="mt-3 text-xs text-zinc-500">Leaderboard unavailable.</div>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  {leaderboardRows.map((row, idx) => (
+                    <div
+                      key={row.owner}
+                      className="grid grid-cols-[48px_1fr_120px_140px] items-center text-xs text-zinc-200"
+                    >
+                      <div className="text-zinc-500">{idx + 1}</div>
+                      <div className="font-mono" title={row.owner}>
+                        {shortPk(row.owner, 4)}
+                      </div>
+                      <div className="text-right text-white">{formatFixed2(row.hp)}</div>
+                      <div className="text-right text-zinc-300">
+                        {mintDecimals ? formatRoundedToken(row.stakedMind, mintDecimals.mind, 2) : "-"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </Card>
         </section>
 
         {error ? <div className="mt-6 text-sm text-amber-200">{error}</div> : null}
