@@ -1313,6 +1313,7 @@ export function PublicDashboard() {
     mintDecimals != null ? formatRoundedToken(stakingRewardBalance, mintDecimals.xnt) : "-";
   const totalStakedBadge =
     mintDecimals != null && config ? formatRoundedToken(config.stakingTotalStakedMind, mintDecimals.mind) : "-";
+  const totalStakedBase = config?.stakingTotalStakedMind ?? 0n;
   const stakingAprDisplay = formatPercent(stakingAprPct);
   const stakingApyDisplay = formatPercent(stakingApyPct);
   const lastClaimRounded =
@@ -2990,6 +2991,11 @@ export function PublicDashboard() {
               </div>
                 {leaderboardRows.map((row, idx) => {
                   const medal = LEADER_MEDALS[idx];
+                  const sharePct =
+                    totalStakedBase > 0n
+                      ? Number((row.stakedMind * 10_000n) / totalStakedBase) / 100
+                      : 0;
+                  const shareLabel = totalStakedBase > 0n ? ` (${sharePct.toFixed(1)}%)` : "";
                   return (
                     <div
                       key={row.owner}
@@ -3005,7 +3011,9 @@ export function PublicDashboard() {
                       </div>
                       <div className="text-right text-white">{formatFixed2(row.hp)}</div>
                       <div className="text-right text-zinc-300">
-                        {mintDecimals ? formatRoundedToken(row.stakedMind, mintDecimals.mind, 2) : "-"}
+                        {mintDecimals
+                          ? `${formatRoundedToken(row.stakedMind, mintDecimals.mind, 2)}${shareLabel}`
+                          : "-"}
                       </div>
                     </div>
                   ))}
