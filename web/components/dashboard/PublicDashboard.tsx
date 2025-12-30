@@ -1995,13 +1995,11 @@ export function PublicDashboard() {
                     tabIndex={0}
                     onClick={() => {
                       setSelectedContract(idx);
-                      setOpenRigDetails(plan.type);
                     }}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
                         setSelectedContract(idx);
-                        setOpenRigDetails(plan.type);
                       }
                     }}
                     className={[
