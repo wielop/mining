@@ -1167,7 +1167,7 @@ describe("mining_v2", () => {
     expect(afterHp.sub(beforeHp).toString()).to.eq(expectedDelta.toString());
   });
 
-  it("renews starter rig with and without buff and charges buff cost", async () => {
+  it("renews starter rig in grace and keeps buff behavior consistent", async () => {
     const user = Keypair.generate();
     await airdrop(user.publicKey, 50);
     await createAssociatedTokenAccountIdempotent(
@@ -1225,7 +1225,7 @@ describe("mining_v2", () => {
     let position = await program.account.minerPosition.fetch(
       positionPda(user.publicKey, 0)
     );
-    expect(position.buffLevel).to.eq(0);
+    expect(position.buffLevel).to.eq(1);
 
     await warpForwardSeconds(8);
     await program.methods
@@ -1269,7 +1269,7 @@ describe("mining_v2", () => {
 
     position = await program.account.minerPosition.fetch(positionPda(user.publicKey, 0));
     expect(position.buffLevel).to.eq(1);
-    expect(position.buffAppliedFromCycle.toNumber()).to.be.greaterThan(0);
+    expect(position.buffAppliedFromCycle.toNumber()).to.eq(0);
 
     const burnAfter = await getTokenAmount(mindBurnVault);
     const treasuryAfter = await getTokenAmount(mindTreasuryVault);

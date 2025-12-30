@@ -325,12 +325,13 @@ pub mod mining_v2 {
             .checked_mul(cfg.seconds_per_day as i64)
             .ok_or(ErrorCode::MathOverflow)?;
         let is_early = now < position.end_ts;
-
-        ensure_position_v2(
-            &ctx.accounts.position,
-            &ctx.accounts.owner.to_account_info(),
-            &ctx.accounts.system_program,
-        )?;
+        let max_buff = rig_max_buff_level(rig_type);
+        let mut new_buff_level = position.buff_level;
+        if new_buff_level < max_buff {
+            new_buff_level = new_buff_level
+                .checked_add(1)
+                .ok_or(ErrorCode::MathOverflow)?;
+        }
 
         if is_early {
             update_mining_global(cfg, now)?;
@@ -346,6 +347,61 @@ pub mod mining_v2 {
                 expire_position(cfg, &mut position, &mut profile, now)?;
             } else {
                 update_mining_global(cfg, now)?;
+            }
+
+            let mut base_total_scaled_other: u128 = 0;
+            let mut buffed_total_scaled_other: u128 = 0;
+            for info in ctx.remaining_accounts.iter() {
+                let entry = load_position_any(info)?;
+                if entry.owner != profile.owner {
+                    continue;
+                }
+                if entry.deactivated || entry.expired || now >= entry.end_ts {
+                    continue;
+                }
+                if info.key == &ctx.accounts.position.key() {
+                    continue;
+                }
+                let rig_type = position_rig_type(&entry, cfg)?;
+                let base_hp_scaled = position_base_hp_scaled(&entry)?;
+                let buff_bps = position_buff_bps(&entry, rig_type, now);
+                base_total_scaled_other = base_total_scaled_other
+                    .checked_add(base_hp_scaled)
+                    .ok_or(ErrorCode::MathOverflow)?;
+                let buffed = apply_bps(base_hp_scaled, buff_bps)?;
+                buffed_total_scaled_other = buffed_total_scaled_other
+                    .checked_add(buffed)
+                    .ok_or(ErrorCode::MathOverflow)?;
+            }
+            let base_total_scaled = base_total_scaled_other;
+            let profile_hp_scaled = profile.active_hp as u128;
+            require!(
+                base_total_scaled == profile_hp_scaled,
+                ErrorCode::InvalidRigBuffPositions
+            );
+
+            let renewed_base_hp_scaled = base_hp_scaled as u128;
+            let renewed_buff_bps = rig_buff_bps(rig_type, new_buff_level);
+            let renewed_buffed_hp_scaled = apply_bps(renewed_base_hp_scaled, renewed_buff_bps)?;
+
+            let base_total_after = base_total_scaled_other
+                .checked_add(renewed_base_hp_scaled)
+                .ok_or(ErrorCode::MathOverflow)?;
+            let buffed_total_after = buffed_total_scaled_other
+                .checked_add(renewed_buffed_hp_scaled)
+                .ok_or(ErrorCode::MathOverflow)?;
+            if base_total_after > 0 {
+                let bonus_bps = buffed_total_after
+                    .checked_sub(base_total_after)
+                    .ok_or(ErrorCode::MathOverflow)?
+                    .checked_mul(BPS_DENOMINATOR)
+                    .ok_or(ErrorCode::MathOverflow)?
+                    .checked_div(base_total_after)
+                    .ok_or(ErrorCode::MathOverflow)?;
+                require!(
+                    bonus_bps <= RIG_BUFF_CAP_BPS as u128,
+                    ErrorCode::RigBuffCapExceeded
+                );
             }
 
             let new_active_hp = profile
@@ -367,6 +423,8 @@ pub mod mining_v2 {
             position.hp = base_hp_scaled;
             position.hp_scaled = true;
             position.rig_type = rig_type;
+            position.buff_level = new_buff_level;
+            position.buff_applied_from_cycle = 0;
             position.expired = false;
             position.deactivated = false;
             position.final_acc_mind_per_hp = 0;
@@ -387,6 +445,12 @@ pub mod mining_v2 {
                 .checked_add(hp_effective_u64)
                 .ok_or(ErrorCode::MathOverflow)?;
         }
+
+        ensure_position_v2(
+            &ctx.accounts.position,
+            &ctx.accounts.owner.to_account_info(),
+            &ctx.accounts.system_program,
+        )?;
 
         let staking_share = (cost_base as u128)
             .checked_mul(STAKING_SHARE_BPS)

@@ -882,13 +882,10 @@ export function PublicDashboard() {
       : null;
   const levelProgressLabel = `Progress: ${levelProgressPct.toFixed(2)}%`;
 
-  const activePositions = useMemo(
-    () =>
-      positions.filter(
-        (p) => !p.data.deactivated && nowTs != null && nowTs < p.data.endTs
-      ),
-    [positions, nowTs]
-  );
+  const activePositions = useMemo(() => {
+    const now = nowTs ?? Math.floor(Date.now() / 1000);
+    return positions.filter((p) => !p.data.deactivated && now < p.data.endTs);
+  }, [positions, nowTs]);
 
   const baseUserHpHundredths = useMemo(() => {
     if (activePositions.length > 0) {
@@ -1326,6 +1323,8 @@ export function PublicDashboard() {
         return "level_up";
       case "Renew with buff":
         return "renew_rig_with_buff";
+      case "Renew":
+        return "renew_rig";
       default:
         return "other";
     }
@@ -1346,7 +1345,10 @@ export function PublicDashboard() {
       } catch (e: unknown) {
         console.error(e);
         errorMsg = formatError(e);
-        if (label === "Renew with buff" && errorMsg.includes("Rig buff cap exceeded")) {
+        if (
+          (label === "Renew with buff" || label === "Renew") &&
+          errorMsg.includes("Rig buff cap exceeded")
+        ) {
           errorMsg =
             "Max rig buff reached (+15% HP). You can still renew this rig, but further buffs won't apply.";
         }
@@ -1494,6 +1496,41 @@ export function PublicDashboard() {
         .instruction();
       tx.add(instruction);
       return await program.provider.sendAndConfirm(tx, []);
+    });
+  };
+
+  const onRenewStandard = async (posPubkey: string) => {
+    if (busy != null) return;
+    if (!anchorWallet || !config || !publicKey) return;
+    if (nowTs == null) {
+      setError("Missing clock data. Refresh and try again.");
+      return;
+    }
+    const program = getProgram(connection, anchorWallet);
+    const activePositions = positions.filter(
+      (entry) =>
+        !entry.data.deactivated && nowTs < entry.data.endTs && entry.pubkey !== posPubkey
+    );
+    await withTx("Renew", async () => {
+      const remainingAccounts: AccountMeta[] = activePositions.map((entry) => ({
+        pubkey: new PublicKey(entry.pubkey),
+        isSigner: false,
+        isWritable: true,
+      }));
+      const sig = await program.methods
+        .renewRig()
+        .accounts({
+          owner: publicKey,
+          config: deriveConfigPda(),
+          userProfile: deriveUserProfilePda(publicKey),
+          position: new PublicKey(posPubkey),
+          stakingRewardVault: config.stakingRewardVault,
+          treasuryVault: config.treasuryVault,
+          systemProgram: SystemProgram.programId,
+        })
+        .remainingAccounts(remainingAccounts)
+        .rpc();
+      return sig;
     });
   };
 
@@ -2431,6 +2468,7 @@ export function PublicDashboard() {
                     !rigBuffConfig ||
                     !mintDecimals ||
                     !hasNextBuffLevel;
+                  const standardDisabled = busy != null || !canRenewStandard;
                   const ratePerHour =
                     networkHpHundredths > 0n
                       ? ((config?.emissionPerSec ?? 0n) * 3_600n * positionRateHp) /
@@ -2548,6 +2586,20 @@ export function PublicDashboard() {
                             </div>
                           ) : null}
                           <div className="mt-3 grid gap-2">
+                            <Button
+                              size="sm"
+                              className="w-full"
+                              variant="secondary"
+                              onClick={() => void onRenewStandard(p.pubkey)}
+                              disabled={standardDisabled}
+                              title={
+                                canRenewStandard
+                                  ? "Available during grace. Applies the next rig buff level if available."
+                                  : "Available during grace only."
+                              }
+                            >
+                              {busy === "Renew" ? "Submitting..." : "Renew (grace)"}
+                            </Button>
                             <Button
                               size="sm"
                               className="w-full"
