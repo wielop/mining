@@ -1197,6 +1197,27 @@ export function PublicDashboard() {
     mintDecimals != null
       ? `${formatRoundedToken(currentPaceBase, mintDecimals.xnt, 2)} XNT/day`
       : "-";
+  const stakeAmountBase = useMemo(() => {
+    if (!mintDecimals) return 0n;
+    try {
+      return parseUiAmountToBase(stakeAmountUi, mintDecimals.mind);
+    } catch {
+      return 0n;
+    }
+  }, [mintDecimals, stakeAmountUi]);
+  const predictedStakeXntBase =
+    config && config.stakingTotalStakedMind > 0n && stakeAmountBase > 0n
+      ? (estimatedStakingPerDay * stakeAmountBase) / config.stakingTotalStakedMind
+      : 0n;
+  const predictedStakeXntBonus =
+    predictedStakeXntBase > 0n
+      ? (predictedStakeXntBase * (BPS_DENOMINATOR + BigInt(effectiveBonusBps))) /
+        BPS_DENOMINATOR
+      : predictedStakeXntBase;
+  const predictedStakeLabel =
+    mintDecimals != null
+      ? `${formatRoundedToken(predictedStakeXntBonus, mintDecimals.xnt, 2)} XNT/day`
+      : "-";
   const claimWalletLabel =
     mintDecimals != null ? formatRoundedToken(claimWalletAmount, mintDecimals.xnt, 4) : "-";
   const claimRipperNetLabel =
@@ -2800,10 +2821,15 @@ export function PublicDashboard() {
                   onClick={() => setMindAmountFromPercent(mindBalance, setStakeAmountUi, 100)}
                   disabled={!hasMindBalance}
                   className={quickAmountButtonClass}
-                >
-                  MAX
-                </Button>
-              </div>
+                  >
+                    MAX
+                  </Button>
+                </div>
+                {stakeAmountUi.trim() !== "" && mintDecimals ? (
+                  <div className="mt-2 text-xs text-zinc-400">
+                    Estimated for this stake: {predictedStakeLabel}
+                  </div>
+                ) : null}
               <Button
                 className="mt-3"
                 onClick={() => void onStake()}
