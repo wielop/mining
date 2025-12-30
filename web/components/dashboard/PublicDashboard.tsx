@@ -123,6 +123,8 @@ const RIG_PLAN_BY_TYPE: Record<RigType, RigPlan> = {
   industrial: RIG_PLANS[2],
 };
 
+const LEADER_MEDALS = ["🥇", "🥈", "🥉"];
+
 const RIG_BEST_FOR: Record<RigType, string> = {
   starter: "Quick rotations, testing, small setups.",
   pro: "Balanced returns, mid-term strategy.",
@@ -2976,17 +2978,29 @@ export function PublicDashboard() {
                 <div className="text-right">HP</div>
                 <div className="text-right">Staked MIND</div>
               </div>
-              {leaderboardRows.length === 0 ? (
-                <div className="mt-3 text-xs text-zinc-500">Leaderboard unavailable.</div>
-              ) : (
-                <div className="mt-3 space-y-2">
-                  {leaderboardRows.map((row, idx) => (
+          {leaderboardRows.length === 0 ? (
+            <div className="mt-3 text-xs text-zinc-500">Leaderboard unavailable.</div>
+          ) : (
+            <div className="mt-3 space-y-2">
+              <div className="grid grid-cols-[48px_1fr_120px_140px] gap-0 text-xs text-transparent">
+                <div>#</div>
+                <div>Wallet</div>
+                <div className="text-right">HP</div>
+                <div className="text-right">Staked MIND</div>
+              </div>
+                {leaderboardRows.map((row, idx) => {
+                  const medal = LEADER_MEDALS[idx];
+                  return (
                     <div
                       key={row.owner}
                       className="grid grid-cols-[48px_1fr_120px_140px] items-center text-xs text-zinc-200"
                     >
                       <div className="text-zinc-500">{idx + 1}</div>
-                      <div className="font-mono" title={row.owner}>
+                      <div
+                        className="flex items-center gap-1 font-mono"
+                        title={row.owner}
+                      >
+                        {medal ? <span aria-label={`Rank ${idx + 1} medal`}>{medal}</span> : null}
                         {shortPk(row.owner, 4)}
                       </div>
                       <div className="text-right text-white">{formatFixed2(row.hp)}</div>
