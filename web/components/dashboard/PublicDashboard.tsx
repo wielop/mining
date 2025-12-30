@@ -1205,15 +1205,18 @@ export function PublicDashboard() {
       return 0n;
     }
   }, [mintDecimals, stakeAmountUi]);
+  const stakeAmountEffectiveBase =
+    mindBalance > 0n && stakeAmountBase > mindBalance ? mindBalance : stakeAmountBase;
   const predictedStakeXntBase =
-    config && config.stakingTotalStakedMind > 0n && stakeAmountBase > 0n
-      ? (estimatedStakingPerDay * stakeAmountBase) / config.stakingTotalStakedMind
+    config && config.stakingTotalStakedMind > 0n && stakeAmountEffectiveBase > 0n
+      ? (estimatedStakingPerDay * stakeAmountEffectiveBase) / config.stakingTotalStakedMind
       : 0n;
   const predictedStakeXntBonus =
     predictedStakeXntBase > 0n
       ? (predictedStakeXntBase * (BPS_DENOMINATOR + BigInt(effectiveBonusBps))) /
         BPS_DENOMINATOR
       : predictedStakeXntBase;
+  const stakeAmountExceedsBalance = mindBalance > 0n ? stakeAmountBase > mindBalance : stakeAmountBase > 0n;
   const predictedStakeLabel =
     mintDecimals != null
       ? `${formatRoundedToken(predictedStakeXntBonus, mintDecimals.xnt, 2)} XNT/day`
@@ -1665,6 +1668,10 @@ export function PublicDashboard() {
       return;
     }
     if (amountBase <= 0n) return;
+    if (amountBase > mindBalance) {
+      setError("Insufficient MIND in wallet to stake that amount.");
+      return;
+    }
     const program = getProgram(connection, anchorWallet);
     await withTx("Stake MIND", async () => {
       const { ata, ix } = await ensureAta(publicKey, config.mindMint);
@@ -2826,8 +2833,13 @@ export function PublicDashboard() {
                   </Button>
                 </div>
                 {stakeAmountUi.trim() !== "" && mintDecimals ? (
-                  <div className="mt-2 text-xs text-zinc-400">
-                    Estimated for this stake: {predictedStakeLabel}
+                  <div className="mt-2 space-y-1 text-xs">
+                    <div className="text-zinc-400">Estimated for this stake: {predictedStakeLabel}</div>
+                    {stakeAmountExceedsBalance ? (
+                      <div className="text-amber-300">
+                        Amount exceeds your wallet balance ({formatRoundedToken(mindBalance, mintDecimals.mind)} MIND).
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               <Button
