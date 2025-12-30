@@ -392,7 +392,6 @@ export function PublicDashboard() {
   const [mindBalance, setMindBalance] = useState<bigint>(0n);
   const [stakingRewardBalance, setStakingRewardBalance] = useState<bigint>(0n);
   const [stakingMindBalance, setStakingMindBalance] = useState<bigint>(0n);
-  const [mindSupply, setMindSupply] = useState<bigint | null>(null);
   const [networkTrend, setNetworkTrend] = useState<{ delta: bigint; pct: number } | null>(null);
   const [activeMinerTotal, setActiveMinerTotal] = useState(0);
   const [activeRigTotal, setActiveRigTotal] = useState(0);
@@ -499,15 +498,6 @@ export function PublicDashboard() {
       }
       if (isStale()) return;
       setMintDecimals({ xnt: xntDecimals, mind: mindMintInfo.decimals });
-      let supply: bigint | null = null;
-      try {
-        const supplyRaw = await connection.getTokenSupply(cfg.mindMint, "confirmed");
-        supply = BigInt(supplyRaw.value.amount || "0");
-      } catch {
-        supply = null;
-      }
-      if (isStale()) return;
-      setMindSupply(supply);
       try {
         const pool = await fetchRipperStakePool(connection);
         if (isStale()) return;
@@ -1324,12 +1314,6 @@ export function PublicDashboard() {
   const totalStakedBadge =
     mintDecimals != null && config ? formatRoundedToken(config.stakingTotalStakedMind, mintDecimals.mind) : "-";
   const totalStakedBase = config?.stakingTotalStakedMind ?? 0n;
-  const totalStakedPercent =
-    mindSupply && mindSupply > 0n && totalStakedBase > 0n
-      ? Number((totalStakedBase * 10_000n) / mindSupply) / 100
-      : null;
-  const totalStakedPercentLabel =
-    totalStakedPercent != null ? ` (${totalStakedPercent.toFixed(1)}% supply)` : "";
   const leaderboardRowElements = leaderboardRows.map((row, idx) => {
     const medal = LEADER_MEDALS[idx];
     const sharePct =
@@ -2105,10 +2089,7 @@ export function PublicDashboard() {
               Active miners: Unique addresses: {activeMinerTotal} | Active rigs: {activeRigTotal}
             </Badge>
             <Badge variant="muted">Reward pool: {rewardPoolBadge} XNT</Badge>
-            <Badge variant="muted">
-              Total staked: {totalStakedBadge} MIND
-              {totalStakedPercentLabel}
-            </Badge>
+            <Badge variant="muted">Total staked: {totalStakedBadge} MIND</Badge>
           </div>
         </div>
 
