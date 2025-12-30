@@ -134,6 +134,7 @@ export function AdminDashboard() {
 
   const [emissionPerDayUi, setEmissionPerDayUi] = useState<string>("");
   const [maxEffectiveHpUi, setMaxEffectiveHpUi] = useState<string>("");
+  const [secondsPerDayUi, setSecondsPerDayUi] = useState<string>(DAY_SECONDS.toString());
   const [epochSecondsUi, setEpochSecondsUi] = useState<string>(
     (DAY_SECONDS * STAKING_EPOCH_DAYS).toString()
   );
@@ -246,6 +247,7 @@ export function AdminDashboard() {
         setEmissionPerDayUi(emissionPerDay.toString());
       }
       setMaxEffectiveHpUi(cfg.maxEffectiveHp.toString());
+      setSecondsPerDayUi(cfg.secondsPerDay.toString());
       try {
         const programId = getProgramId();
         const [positionsV1, positionsV2, stakes, profilesV1, profilesV2, profilesV3] =
@@ -517,11 +519,22 @@ export function AdminDashboard() {
       setError("Invalid max HP value");
       return;
     }
-    if (emissionPerSec <= 0n || maxHp <= 0n) return;
+    let secondsPerDay: bigint;
+    try {
+      secondsPerDay = BigInt(secondsPerDayUi || "0");
+    } catch {
+      setError("Invalid seconds per day value");
+      return;
+    }
+    if (emissionPerSec <= 0n || maxHp <= 0n || secondsPerDay <= 0n) return;
     const program = getProgram(connection, anchorWallet);
     await withTx("Update config", async () => {
       const sig = await program.methods
-        .adminUpdateConfig(new BN(emissionPerSec.toString()), new BN(maxHp.toString()))
+        .adminUpdateConfig(
+          new BN(emissionPerSec.toString()),
+          new BN(maxHp.toString()),
+          new BN(secondsPerDay.toString())
+        )
         .accounts({
           admin: publicKey!,
           config: deriveConfigPda(),
@@ -848,6 +861,8 @@ export function AdminDashboard() {
             <Input value={emissionPerDayUi} onChange={setEmissionPerDayUi} />
             <div className="mt-3 text-xs text-zinc-400">Max effective HP</div>
             <Input value={maxEffectiveHpUi} onChange={setMaxEffectiveHpUi} />
+            <div className="mt-3 text-xs text-zinc-400">Seconds per day</div>
+            <Input value={secondsPerDayUi} onChange={setSecondsPerDayUi} />
             <Button className="mt-4" onClick={() => void onUpdateConfig()} disabled={!isAdmin || busy != null}>
               {busy === "Update config" ? "Submitting..." : "Update Config"}
             </Button>

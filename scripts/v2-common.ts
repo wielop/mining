@@ -30,7 +30,7 @@ export const getProvider = () => {
   const rpc =
     process.env.RPC_URL ??
     process.env.ANCHOR_PROVIDER_URL ??
-    "https://rpc.testnet.x1.xyz";
+    "https://rpc.mainnet.x1.xyz";
   const walletPath =
     process.env.WALLET ??
     process.env.ANCHOR_WALLET ??

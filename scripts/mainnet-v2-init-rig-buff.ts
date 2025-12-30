@@ -49,7 +49,7 @@ const main = async () => {
 
   const configInfo = await connection.getAccountInfo(configPda, "confirmed");
   if (!configInfo) {
-    throw new Error("Config not found. Run scripts/testnet-v2-init.ts first.");
+    throw new Error("Config not found. Run scripts/mainnet-v2-init.ts first.");
   }
   const cfg = await fetchConfig(connection);
   if (!cfg) {

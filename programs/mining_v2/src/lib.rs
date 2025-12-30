@@ -1217,13 +1217,16 @@ pub mod mining_v2 {
         ctx: Context<AdminUpdateConfig>,
         emission_per_sec: u64,
         max_effective_hp: u64,
+        seconds_per_day: u64,
     ) -> Result<()> {
         require!(emission_per_sec > 0, ErrorCode::InvalidAmount);
         require!(max_effective_hp > 0, ErrorCode::InvalidAmount);
+        require!(seconds_per_day > 0, ErrorCode::InvalidAmount);
         let cfg = &mut ctx.accounts.config;
         require_keys_eq!(cfg.admin, ctx.accounts.admin.key(), ErrorCode::Unauthorized);
         cfg.emission_per_sec = emission_per_sec;
         cfg.max_effective_hp = max_effective_hp;
+        cfg.seconds_per_day = seconds_per_day;
         Ok(())
     }
 

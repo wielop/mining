@@ -678,6 +678,10 @@
         {
           "name": "maxEffectiveHp",
           "type": "u64"
+        },
+        {
+          "name": "secondsPerDay",
+          "type": "u64"
         }
       ]
     },

@@ -32,7 +32,7 @@ const main = async () => {
 
   const cfg = await fetchConfig(connection);
   if (!cfg) {
-    throw new Error("Config not found. Run yarn testnet:deploy first.");
+    throw new Error("Config not found. Run yarn mainnet:deploy first.");
   }
 
   const vaultAuthority = deriveVaultPda();

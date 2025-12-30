@@ -29,16 +29,16 @@ anchor build
 yarn test
 ```
 
-## Testnet deploy + smoke
+## Mainnet deploy + smoke
 ```
-yarn testnet:deploy
+yarn mainnet:deploy
 # opcjonalnie
-V2_SMOKE_BUY=1 V2_SMOKE_CLAIM=1 V2_SMOKE_STAKE=1 yarn testnet:smoke
+V2_SMOKE_BUY=1 V2_SMOKE_CLAIM=1 V2_SMOKE_STAKE=1 yarn mainnet:smoke
 ```
 
 ## ENV (skrypty)
 Wymagane/obslugiwane zmienne:
-- `RPC_URL` (domyslnie: https://rpc.testnet.x1.xyz)
+- `RPC_URL` (domyslnie: https://rpc.mainnet.x1.xyz)
 - `WALLET` (domyslnie: ~/.config/solana/id.json)
 - `NEXT_PUBLIC_PROGRAM_ID` (Program ID V2)
 - `XNT_MINT` (domyslnie: So11111111111111111111111111111111111111112)
@@ -46,7 +46,7 @@ Wymagane/obslugiwane zmienne:
 - `MIND_DECIMALS` (domyslnie: 9)
 - `EMISSION_MIND_PER_DAY` (domyslnie: 10000)
 - `EMISSION_PER_SEC` (opcjonalnie - nadpisuje wyliczenie per day)
-- `MAX_EFFECTIVE_HP` (domyslnie: 50)
+- `MAX_EFFECTIVE_HP` (domyslnie: 250)
 - `SECONDS_PER_DAY` (domyslnie: 86400)
 - `SEED_STAKING_XNT_BASE` (opcjonalnie - seed vaulta staking)
 - `SEED_TREASURY_XNT_BASE` (opcjonalnie - seed treasury)
@@ -54,5 +54,5 @@ Wymagane/obslugiwane zmienne:
 ## Web (Vercel)
 Root Directory: `web`
 Env vars:
-- `NEXT_PUBLIC_RPC_URL=https://rpc.testnet.x1.xyz`
+- `NEXT_PUBLIC_RPC_URL=https://rpc.mainnet.x1.xyz`
 - `NEXT_PUBLIC_PROGRAM_ID=uaDkkJGLLEY3kFMhhvrh5MZJ6fmwCmhNf8L7BZQJ9Aw`

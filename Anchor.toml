@@ -7,6 +7,9 @@ skip-lint = false
 [programs.localnet]
 mining_v2 = "uaDkkJGLLEY3kFMhhvrh5MZJ6fmwCmhNf8L7BZQJ9Aw"
 
+[programs.mainnet]
+mining_v2 = "uaDkkJGLLEY3kFMhhvrh5MZJ6fmwCmhNf8L7BZQJ9Aw"
+
 [programs.testnet]
 mining_v2 = "uaDkkJGLLEY3kFMhhvrh5MZJ6fmwCmhNf8L7BZQJ9Aw"
 
@@ -14,7 +17,7 @@ mining_v2 = "uaDkkJGLLEY3kFMhhvrh5MZJ6fmwCmhNf8L7BZQJ9Aw"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "https://rpc.testnet.x1.xyz"
+cluster = "https://rpc.mainnet.x1.xyz"
 wallet = "~/.config/solana/id.json"
 
 [test]

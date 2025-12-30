@@ -89,7 +89,7 @@ const main = async () => {
       process.env.EMISSION_PER_SEC,
       toBaseUnits(emissionPerDay, mindDecimals) / 86_400n
     );
-    const maxEffectiveHp = parseBigInt(process.env.MAX_EFFECTIVE_HP, 50n);
+    const maxEffectiveHp = parseBigInt(process.env.MAX_EFFECTIVE_HP, 250n);
     const secondsPerDay = parseBigInt(process.env.SECONDS_PER_DAY, 86_400n);
 
     await program.methods
