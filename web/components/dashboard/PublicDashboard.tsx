@@ -934,16 +934,11 @@ export function PublicDashboard() {
     networkHpHundredths > networkBuffedHpHundredths
       ? networkHpHundredths - networkBuffedHpHundredths
       : 0n;
-  const networkRigBuffPct =
-    networkBaseHpHundredths > 0n
-      ? Number((networkRigBuffBonusHundredths * 10_000n) / networkBaseHpHundredths) / 100
-      : 0;
   const networkAccountBonusPct =
     networkBuffedHpHundredths > 0n
       ? Number((networkAccountBonusHundredths * 10_000n) / networkBuffedHpHundredths) / 100
       : 0;
   const networkBaseHpLabel = formatFixed2(networkBaseHpHundredths);
-  const networkRigBuffBonusLabel = formatFixed2(networkRigBuffBonusHundredths);
   const networkAccountBonusLabel = formatFixed2(networkAccountBonusHundredths);
   const miningStatusText =
     networkHp > 0n
@@ -1850,17 +1845,6 @@ export function PublicDashboard() {
                   <span>Base HP</span>
                   <span className="text-zinc-200" data-testid="network-base-hp">
                     {hasNetworkBreakdown ? networkBaseHpLabel : "-"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="inline-flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.6)]" />
-                    Rig buffs
-                  </span>
-                  <span className="text-emerald-200" data-testid="network-rig-buffs">
-                    {hasNetworkBreakdown
-                      ? `+${networkRigBuffBonusLabel} HP (+${networkRigBuffPct.toFixed(1)}%)`
-                      : "-"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
