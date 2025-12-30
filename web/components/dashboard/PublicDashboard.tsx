@@ -1314,6 +1314,32 @@ export function PublicDashboard() {
   const totalStakedBadge =
     mintDecimals != null && config ? formatRoundedToken(config.stakingTotalStakedMind, mintDecimals.mind) : "-";
   const totalStakedBase = config?.stakingTotalStakedMind ?? 0n;
+  const leaderboardRowElements = leaderboardRows.map((row, idx) => {
+    const medal = LEADER_MEDALS[idx];
+    const sharePct =
+      totalStakedBase > 0n
+        ? Number((row.stakedMind * 10_000n) / totalStakedBase) / 100
+        : 0;
+    const shareLabel = totalStakedBase > 0n ? ` (${sharePct.toFixed(1)}%)` : "";
+    const stakedLabel =
+      mintDecimals != null
+        ? `${formatRoundedToken(row.stakedMind, mintDecimals.mind, 2)}${shareLabel}`
+        : "-";
+    return (
+      <div
+        key={row.owner}
+        className="grid grid-cols-[48px_1fr_120px_140px] items-center text-xs text-zinc-200"
+      >
+        <div className="text-zinc-500">{idx + 1}</div>
+        <div className="flex items-center gap-1 font-mono" title={row.owner}>
+          {medal ? <span aria-label={`Rank ${idx + 1} medal`}>{medal}</span> : null}
+          {shortPk(row.owner, 4)}
+        </div>
+        <div className="text-right text-white">{formatFixed2(row.hp)}</div>
+        <div className="text-right text-zinc-300">{stakedLabel}</div>
+      </div>
+    );
+  });
   const stakingAprDisplay = formatPercent(stakingAprPct);
   const stakingApyDisplay = formatPercent(stakingApyPct);
   const lastClaimRounded =
@@ -2979,45 +3005,10 @@ export function PublicDashboard() {
                 <div className="text-right">HP</div>
                 <div className="text-right">Staked MIND</div>
               </div>
-          {leaderboardRows.length === 0 ? (
-            <div className="mt-3 text-xs text-zinc-500">Leaderboard unavailable.</div>
-          ) : (
-            <div className="mt-3 space-y-2">
-              <div className="grid grid-cols-[48px_1fr_120px_140px] gap-0 text-xs text-transparent">
-                <div>#</div>
-                <div>Wallet</div>
-                <div className="text-right">HP</div>
-                <div className="text-right">Staked MIND</div>
-              </div>
-                {leaderboardRows.map((row, idx) => {
-                  const medal = LEADER_MEDALS[idx];
-                  const sharePct =
-                    totalStakedBase > 0n
-                      ? Number((row.stakedMind * 10_000n) / totalStakedBase) / 100
-                      : 0;
-                  const shareLabel = totalStakedBase > 0n ? ` (${sharePct.toFixed(1)}%)` : "";
-                  return (
-                    <div
-                      key={row.owner}
-                      className="grid grid-cols-[48px_1fr_120px_140px] items-center text-xs text-zinc-200"
-                    >
-                      <div className="text-zinc-500">{idx + 1}</div>
-                      <div
-                        className="flex items-center gap-1 font-mono"
-                        title={row.owner}
-                      >
-                        {medal ? <span aria-label={`Rank ${idx + 1} medal`}>{medal}</span> : null}
-                        {shortPk(row.owner, 4)}
-                      </div>
-                      <div className="text-right text-white">{formatFixed2(row.hp)}</div>
-                      <div className="text-right text-zinc-300">
-                        {mintDecimals
-                          ? `${formatRoundedToken(row.stakedMind, mintDecimals.mind, 2)}${shareLabel}`
-                          : "-"}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+              {leaderboardRows.length === 0 ? (
+                <div className="mt-3 text-xs text-zinc-500">Leaderboard unavailable.</div>
+              ) : (
+                <div className="mt-3 space-y-2">{leaderboardRowElements}</div>
               )}
             </div>
           </Card>
