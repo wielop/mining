@@ -772,6 +772,13 @@ export function AdminDashboard() {
                 : "-"}{" "}
               XNT
             </div>
+            <div className="mt-2 text-xs text-zinc-400">
+              Rig revenue (total):{" "}
+              {mintDecimals
+                ? formatTokenAmount(stakingRewardBalance + treasuryBalance, mintDecimals.xnt, 4)
+                : "-"}{" "}
+              XNT
+            </div>
           </Card>
         </div>
 
