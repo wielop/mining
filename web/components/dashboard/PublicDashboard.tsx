@@ -505,11 +505,11 @@ export function PublicDashboard() {
       setMintDecimals({ xnt: xntDecimals, mind: mindMintInfo.decimals });
       let sharePct: number | null = null;
       try {
-        const excludedAccounts = await connection.getTokenAccountsByOwner(EXCLUDED_MIND_LP_OWNER, {
-          commitment: "confirmed",
-          mint: cfg.mindMint,
-          programId: TOKEN_PROGRAM_ID,
-        });
+        const excludedAccounts = await connection.getTokenAccountsByOwner(
+          EXCLUDED_MIND_LP_OWNER,
+          { mint: cfg.mindMint },
+          "confirmed"
+        );
         let excludedBalance = 0n;
         for (const entry of excludedAccounts.value) {
           const decoded = AccountLayout.decode(entry.account.data.slice(0, AccountLayout.span));
