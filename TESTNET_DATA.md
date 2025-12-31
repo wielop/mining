@@ -15,6 +15,9 @@
 - TreasuryVault (XNT): `FLMUrTvrtXQGp8yTL15GTBfH3mk47pSZoSNp6ycuVqgF`
 - StakingMindVault (MIND): `6xWkh57zKwBJtxhZLjiLnKQCEYXcEhoZLnEKU1Rya8tf`
 
+## Narzędzia admina (testnet)
+- `WITHDRAW_STAKING_REWARDS_LAMPORTS=<lamports> yarn withdraw-staking-rewards` — opróżnia vault nagród niezależnie od stake’ów; po operacji epoka zostaje zresetowana, więc najpierw ustaw docelowe tempo `roll_epoch`.
+
 ## Web (Vercel)
 - `NEXT_PUBLIC_RPC_URL=https://rpc.testnet.x1.xyz`
 - `NEXT_PUBLIC_PROGRAM_ID=uaDkkJGLLEY3kFMhhvrh5MZJ6fmwCmhNf8L7BZQJ9Aw`

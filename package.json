@@ -7,7 +7,8 @@
     "build:program": "anchor build",
     "mainnet:deploy": "bash scripts/mainnet-v2-deploy.sh",
     "mainnet:smoke": "ts-node scripts/mainnet-v2-smoke.ts",
-    "claim-mind-bot": "ts-node scripts/claim-mind-bot.ts"
+    "claim-mind-bot": "ts-node scripts/claim-mind-bot.ts",
+    "withdraw-staking-rewards": "ts-node scripts/withdraw-staking-rewards.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.30.1",

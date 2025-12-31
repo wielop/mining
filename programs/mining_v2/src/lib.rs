@@ -1291,6 +1291,38 @@ pub mod mining_v2 {
         Ok(())
     }
 
+    pub fn admin_withdraw_staking_rewards(
+        ctx: Context<AdminWithdrawStakingRewards>,
+        amount: u64,
+    ) -> Result<()> {
+        require!(amount > 0, ErrorCode::InvalidAmount);
+        let cfg = &mut ctx.accounts.config;
+        require_keys_eq!(cfg.admin, ctx.accounts.admin.key(), ErrorCode::Unauthorized);
+        let available = vault_available_lamports(&ctx.accounts.staking_reward_vault)?;
+        require!(available >= amount, ErrorCode::InsufficientVaultBalance);
+
+        transfer_lamports(
+            &ctx.accounts.staking_reward_vault.to_account_info(),
+            &ctx.accounts.admin.to_account_info(),
+            amount,
+        )?;
+
+        let remaining = vault_available_lamports(&ctx.accounts.staking_reward_vault)?;
+        cfg.staking_accounted_balance = remaining;
+        cfg.staking_undistributed_xnt =
+            cfg.staking_undistributed_xnt.min(remaining);
+        let now = Clock::get()?.unix_timestamp;
+        cfg.staking_reward_rate_xnt_per_sec = 0;
+        cfg.staking_epoch_end_ts = now;
+        cfg.staking_last_update_ts = now;
+
+        emit!(StakingRewardsWithdrawn {
+            admin: cfg.admin,
+            amount,
+        });
+        Ok(())
+    }
+
     pub fn admin_withdraw_treasury(ctx: Context<AdminWithdrawTreasury>, amount: u64) -> Result<()> {
         require!(amount > 0, ErrorCode::InvalidAmount);
         let cfg = &ctx.accounts.config;
@@ -1949,6 +1981,26 @@ pub struct AdminUseNativeXnt<'info> {
 }
 
 #[derive(Accounts)]
+pub struct AdminWithdrawStakingRewards<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [CONFIG_SEED],
+        bump = config.bumps.config
+    )]
+    pub config: Box<Account<'info, Config>>,
+    #[account(
+        mut,
+        seeds = [STAKING_REWARD_VAULT_SEED],
+        bump = staking_reward_vault.bump,
+        constraint = staking_reward_vault.key() == config.staking_reward_vault
+    )]
+    pub staking_reward_vault: Account<'info, NativeVault>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 pub struct AdminWithdrawTreasury<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
@@ -2168,16 +2220,22 @@ pub struct MindUnstaked {
 }
 
 #[event]
-pub struct XntClaimed {
-    pub owner: Pubkey,
-    pub amount: u64,
-    pub bonus_bps: u16,
-}
+    pub struct XntClaimed {
+        pub owner: Pubkey,
+        pub amount: u64,
+        pub bonus_bps: u16,
+    }
 
-#[event]
-pub struct EpochRolled {
-    pub rate: u64,
-    pub epoch_end_ts: i64,
+    #[event]
+    pub struct StakingRewardsWithdrawn {
+        pub admin: Pubkey,
+        pub amount: u64,
+    }
+
+    #[event]
+    pub struct EpochRolled {
+        pub rate: u64,
+        pub epoch_end_ts: i64,
 }
 
 fn level_bonus_bps(level: u8) -> u16 {

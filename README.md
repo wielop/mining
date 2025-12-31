@@ -22,6 +22,9 @@ Nowy program mining+staking V2 dla X1. V1 zostal usuniety z repo (legacy nie jes
 - `deactivate_position` - wygaszenie kontraktu po endTs
 - `stake_mind` / `unstake_mind` / `claim_xnt` / `roll_epoch`
 
+## Narzędzia administracyjne (testnet)
+- `WITHDRAW_STAKING_REWARDS_LAMPORTS=<lamports> yarn withdraw-staking-rewards` — wycofuje XNT z `stakingRewardVault` nawet gdy są aktywne stake’i; pamiętaj, że instrukcja resetuje `staking_reward_rate_xnt_per_sec`, więc po wypłacie warto ponownie rzucić `roll_epoch`.
+
 ## Local dev
 ```
 yarn install

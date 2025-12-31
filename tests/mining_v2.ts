@@ -1612,4 +1612,135 @@ describe("mining_v2", () => {
     );
     expect(position.deactivated).to.eq(true);
   });
+
+  it("lets admin withdraw staking rewards when no stake is present", async () => {
+    const depositAmount = LAMPORTS_PER_SOL * 2;
+    const withdrawAmount = LAMPORTS_PER_SOL;
+
+    const fundTx = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: admin.publicKey,
+        toPubkey: stakingRewardVault,
+        lamports: depositAmount,
+      })
+    );
+    await provider.sendAndConfirm(fundTx, [admin]);
+
+    const vaultBefore = await provider.connection.getBalance(stakingRewardVault);
+
+    await program.methods
+      .adminWithdrawStakingRewards(new BN(withdrawAmount))
+      .accounts({
+        admin: admin.publicKey,
+        config: configPda,
+        stakingRewardVault,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([admin])
+      .rpc();
+
+    const vaultAfter = await provider.connection.getBalance(stakingRewardVault);
+    expect(vaultBefore - vaultAfter).to.eq(withdrawAmount);
+
+    const cfgAfter = await program.account.config.fetch(configPda);
+    expect(cfgAfter.staking_total_staked_mind).to.eq(0);
+    expect(cfgAfter.staking_reward_rate_xnt_per_sec).to.eq(0);
+    expect(cfgAfter.staking_epoch_end_ts.toNumber()).to.eq(
+      cfgAfter.staking_last_update_ts.toNumber()
+    );
+  });
+
+  it("allows admin to withdraw staking rewards while staking is active", async () => {
+    const depositAmount = LAMPORTS_PER_SOL * 2;
+    const staker = Keypair.generate();
+    await airdrop(staker.publicKey, 2);
+    await createAssociatedTokenAccountIdempotent(
+      provider.connection,
+      admin,
+      mindMint,
+      staker.publicKey
+    );
+
+    const fundTx = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: admin.publicKey,
+        toPubkey: stakingRewardVault,
+        lamports: depositAmount,
+      })
+    );
+    await provider.sendAndConfirm(fundTx, [admin]);
+
+    await program.methods
+      .buyContract(0, new BN(0))
+      .accounts({
+        owner: staker.publicKey,
+        config: configPda,
+        userProfile: profilePda(staker.publicKey),
+        position: positionPda(staker.publicKey, 0),
+        stakingRewardVault,
+        treasuryVault,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([staker])
+      .rpc();
+
+    await sleep(1200);
+
+    await program.methods
+      .claimMind()
+      .accounts({
+        owner: staker.publicKey,
+        config: configPda,
+        userProfile: profilePda(staker.publicKey),
+        position: positionPda(staker.publicKey, 0),
+        vaultAuthority,
+        mindMint,
+        userMindAta: userMindAta(staker.publicKey),
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([staker])
+      .rpc();
+
+    const minted = await getTokenAmount(userMindAta(staker.publicKey));
+    expect(minted.gt(new BN(0))).to.be.true;
+
+    await program.methods
+      .stakeMind(minted)
+      .accounts({
+        owner: staker.publicKey,
+        config: configPda,
+        userProfile: profilePda(staker.publicKey),
+        userStake: stakePda(staker.publicKey),
+        vaultAuthority,
+        stakingMindVault,
+        ownerMindAta: userMindAta(staker.publicKey),
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([staker])
+      .rpc();
+
+    const cfgBefore = await program.account.config.fetch(configPda);
+    expect(cfgBefore.staking_total_staked_mind).to.be.greaterThan(0);
+
+    const vaultBeforeActive = await provider.connection.getBalance(stakingRewardVault);
+    await program.methods
+      .adminWithdrawStakingRewards(new BN(LAMPORTS_PER_SOL))
+      .accounts({
+        admin: admin.publicKey,
+        config: configPda,
+        stakingRewardVault,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([admin])
+      .rpc();
+    const vaultAfterActive = await provider.connection.getBalance(stakingRewardVault);
+    expect(vaultBeforeActive - vaultAfterActive).to.eq(LAMPORTS_PER_SOL);
+
+    const cfgAfterActive = await program.account.config.fetch(configPda);
+    expect(cfgAfterActive.staking_total_staked_mind).to.be.greaterThan(0);
+    expect(cfgAfterActive.staking_reward_rate_xnt_per_sec).to.eq(0);
+  });
+});
 });
