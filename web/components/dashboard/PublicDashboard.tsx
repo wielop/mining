@@ -3094,35 +3094,34 @@ export function PublicDashboard() {
             <div className="mt-5 text-xs text-zinc-500">
               Your stake: {stakeSummary} · Your share: {stakeShareRounded}
             </div>
-          </Card>
-
-          <Card className="mt-6 border-emerald-400/20 bg-ink/90 p-6">
-            <div className="text-2xl font-semibold">Active stakers</div>
-            <div className="mt-1 text-xs text-zinc-400">
-              Unique addresses: {ACTIVE_STAKERS_SUMMARY.unique} | Total staked: {ACTIVE_STAKERS_SUMMARY.totalStaked} MIND | Updated{" "}
-              {ACTIVE_STAKERS_SUMMARY.updated}
-            </div>
-            <div className="mt-4 overflow-x-auto">
-              <table className="min-w-full text-left text-xs text-zinc-300">
-                <thead>
-                  <tr className="text-[11px] uppercase tracking-[0.25em] text-zinc-500">
-                    <th className="pb-2 pr-4 font-normal">Address</th>
-                    <th className="pb-2 pr-4 font-normal">Staked (MIND)</th>
-                    <th className="pb-2 pr-4 font-normal">Share</th>
-                    <th className="pb-2 font-normal">Reward/day (XNT)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ACTIVE_STAKERS.map((staker) => (
-                    <tr key={staker.owner} className="border-b border-white/5">
-                      <td className="py-2 align-top font-mono text-[11px] text-white">{staker.owner}</td>
-                      <td className="py-2">{staker.staked}</td>
-                      <td className="py-2">{staker.share}</td>
-                      <td className="py-2">{staker.reward}</td>
+            <div className="mt-6 border-t border-white/10 pt-4">
+              <div className="text-sm font-semibold">Active stakers</div>
+              <div className="mt-1 text-[11px] text-zinc-400">
+                Unique addresses: {ACTIVE_STAKERS_SUMMARY.unique} | Total staked: {ACTIVE_STAKERS_SUMMARY.totalStaked} MIND | Updated{" "}
+                {ACTIVE_STAKERS_SUMMARY.updated}
+              </div>
+              <div className="mt-3 max-h-48 overflow-y-auto">
+                <table className="min-w-full text-left text-[11px] text-zinc-300">
+                  <thead>
+                    <tr className="text-[10px] uppercase tracking-[0.25em] text-zinc-500">
+                      <th className="pb-2 pr-4 font-normal">Address</th>
+                      <th className="pb-2 pr-4 font-normal">Staked</th>
+                      <th className="pb-2 pr-4 font-normal">Share</th>
+                      <th className="pb-2 font-normal">Reward/day</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {ACTIVE_STAKERS.map((staker) => (
+                      <tr key={staker.owner} className="border-b border-white/5">
+                        <td className="py-2 align-top font-mono text-[11px] text-white">{staker.owner}</td>
+                        <td className="py-2">{staker.staked}</td>
+                        <td className="py-2">{staker.share}</td>
+                        <td className="py-2">{staker.reward}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </Card>
         </section>
