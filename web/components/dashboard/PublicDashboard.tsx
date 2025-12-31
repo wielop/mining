@@ -118,6 +118,8 @@ const RIG_PLANS: RigPlan[] = [
   },
 ];
 
+const RIG_PURCHASING_DISABLED = true; // disable new rig purchases until further notice
+
 const ACTIVE_STAKERS_SUMMARY = {
   unique: 13,
   totalStaked: "981.5273",
@@ -1591,6 +1593,10 @@ export function PublicDashboard() {
   );
 
   const onBuy = async () => {
+    if (RIG_PURCHASING_DISABLED) {
+      setError("Purchasing new rigs is temporarily disabled by the admin.");
+      return;
+    }
     if (!anchorWallet || !publicKey || !config) return;
     const program = getProgram(connection, anchorWallet);
     const nextIndex = userProfile?.nextPositionIndex ?? BigInt(positions.length);
@@ -2011,7 +2017,8 @@ export function PublicDashboard() {
     });
   };
 
-  const buyDisabled = !canTransact || !config || Boolean(busy);
+  const buyDisabled =
+    RIG_PURCHASING_DISABLED || !canTransact || !config || Boolean(busy);
   const stakeDisabled =
     !canTransact || !config || !mintDecimals || Boolean(busy) || stakeAmountUi.trim() === "";
   const unstakeDisabled =
@@ -2273,11 +2280,13 @@ export function PublicDashboard() {
                     role="button"
                     tabIndex={0}
                     onClick={() => {
+                      if (RIG_PURCHASING_DISABLED) return;
                       setSelectedContract(idx);
                     }}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") {
                         event.preventDefault();
+                        if (RIG_PURCHASING_DISABLED) return;
                         setSelectedContract(idx);
                       }
                     }}
@@ -2298,6 +2307,7 @@ export function PublicDashboard() {
                         data-rig-details-toggle
                         onClick={(event) => {
                           event.stopPropagation();
+                          if (RIG_PURCHASING_DISABLED) return;
                           setSelectedContract(idx);
                           setOpenRigDetails((prev) => (prev === plan.type ? null : plan.type));
                         }}
@@ -2372,6 +2382,11 @@ export function PublicDashboard() {
                   {busy === "Buy contract" ? "Submitting..." : "Start mining"}
                 </Button>
               </div>
+              {RIG_PURCHASING_DISABLED ? (
+                <div className="mt-3 text-xs text-amber-300">
+                  Purchasing new rigs is temporarily disabled by the admin.
+                </div>
+              ) : null}
             </div>
 
             {showRigInfoModal ? (
