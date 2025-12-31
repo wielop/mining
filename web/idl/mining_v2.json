@@ -80,7 +80,7 @@
       "accounts": [
         {
           "name": "admin",
-          "isMut": false,
+          "isMut": true,
           "isSigner": true
         },
         {
@@ -635,7 +635,7 @@
       "accounts": [
         {
           "name": "admin",
-          "isMut": true,
+          "isMut": false,
           "isSigner": true
         },
         {
@@ -762,6 +762,37 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "adminWithdrawStakingRewards",
+      "accounts": [
+        {
+          "name": "admin",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "config",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "stakingRewardVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
     },
     {
       "name": "adminWithdrawTreasury",
@@ -1445,6 +1476,21 @@
       ]
     },
     {
+      "name": "StakingRewardsWithdrawn",
+      "fields": [
+        {
+          "name": "admin",
+          "type": "publicKey",
+          "index": false
+        },
+        {
+          "name": "amount",
+          "type": "u64",
+          "index": false
+        }
+      ]
+    },
+    {
       "name": "EpochRolled",
       "fields": [
         {
@@ -1508,113 +1554,136 @@
     },
     {
       "code": 6009,
+      "name": "InvalidMintDecimals",
+      "msg": "Invalid mint decimals"
+    },
+    {
+      "code": 6010,
       "name": "InsufficientStake",
       "msg": "Insufficient stake balance"
     },
     {
-      "code": 6010,
+      "code": 6011,
       "name": "InsufficientVaultBalance",
       "msg": "Insufficient vault balance"
     },
     {
-      "code": 6011,
+      "code": 6012,
       "name": "InvalidContractType",
       "msg": "Invalid contract type"
     },
     {
-      "code": 6012,
+      "code": 6013,
       "name": "InvalidMint",
       "msg": "Invalid mint"
     },
     {
-      "code": 6013,
+      "code": 6014,
+      "name": "InvalidProgramData",
+      "msg": "Invalid program data"
+    },
+    {
+      "code": 6015,
       "name": "InvalidUserProfileOwner",
       "msg": "Invalid user profile owner"
     },
     {
-      "code": 6014,
+      "code": 6016,
       "name": "InvalidUserProfileDiscriminator",
       "msg": "Invalid user profile discriminator"
     },
     {
-      "code": 6015,
+      "code": 6017,
       "name": "InvalidUserProfileSize",
       "msg": "Invalid user profile size"
     },
     {
-      "code": 6016,
+      "code": 6018,
       "name": "MaxLevelReached",
       "msg": "Max level reached"
     },
     {
-      "code": 6017,
+      "code": 6019,
+      "name": "LevelsDisabled",
+      "msg": "Account levels are disabled"
+    },
+    {
+      "code": 6020,
       "name": "InsufficientXp",
       "msg": "Insufficient XP"
     },
     {
-      "code": 6018,
+      "code": 6021,
       "name": "InsufficientLevelUpFunds",
       "msg": "Insufficient MIND for level up"
     },
     {
-      "code": 6019,
+      "code": 6022,
       "name": "HpScaleAlreadyEnabled",
       "msg": "HP scaling already enabled"
     },
     {
-      "code": 6020,
+      "code": 6023,
       "name": "InvalidLevel",
       "msg": "Invalid level"
     },
     {
-      "code": 6021,
+      "code": 6024,
       "name": "InvalidLevelUpPositions",
       "msg": "Invalid level up positions"
     },
     {
-      "code": 6022,
+      "code": 6025,
       "name": "InvalidPositionOwner",
       "msg": "Invalid position owner"
     },
     {
-      "code": 6023,
+      "code": 6026,
       "name": "InvalidPositionDiscriminator",
       "msg": "Invalid position discriminator"
     },
     {
-      "code": 6024,
+      "code": 6027,
       "name": "InvalidPositionSize",
       "msg": "Invalid position size"
     },
     {
-      "code": 6025,
+      "code": 6028,
       "name": "InvalidRigDuration",
       "msg": "Invalid rig duration"
     },
     {
-      "code": 6026,
+      "code": 6029,
       "name": "PositionInGrace",
       "msg": "Position still in grace period"
     },
     {
-      "code": 6027,
+      "code": 6030,
       "name": "PositionGraceExpired",
       "msg": "Position grace period expired"
     },
     {
-      "code": 6028,
+      "code": 6031,
+      "name": "InvalidEpochSeconds",
+      "msg": "Invalid epoch seconds"
+    },
+    {
+      "code": 6032,
       "name": "RigBuffCapExceeded",
       "msg": "Rig buff cap exceeded"
     },
     {
-      "code": 6029,
+      "code": 6033,
       "name": "InsufficientBuffFunds",
       "msg": "Insufficient MIND for rig buff"
     },
     {
-      "code": 6030,
+      "code": 6034,
       "name": "InvalidRigBuffPositions",
       "msg": "Invalid rig buff positions"
     }
-  ]
+  ],
+  "metadata": {
+    "address": "uaDkkJGLLEY3kFMhhvrh5MZJ6fmwCmhNf8L7BZQJ9Aw"
+  }
 }

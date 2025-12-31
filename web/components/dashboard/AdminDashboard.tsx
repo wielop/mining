@@ -143,6 +143,7 @@ export function AdminDashboard() {
   const [badgeBonusBps, setBadgeBonusBps] = useState<string>("0");
   const [rewardTopUpUi, setRewardTopUpUi] = useState<string>("");
   const [treasuryWithdrawUi, setTreasuryWithdrawUi] = useState<string>("3.8");
+  const [stakingWithdrawUi, setStakingWithdrawUi] = useState<string>("1");
 
   const [busy, setBusy] = useState<string | null>(null);
   const [lastSig, setLastSig] = useState<string | null>(null);
@@ -439,6 +440,8 @@ export function AdminDashboard() {
         return "admin_fund_reward";
       case "Withdraw treasury":
         return "admin_withdraw_treasury";
+      case "Withdraw staking rewards":
+        return "admin_withdraw_staking_rewards";
       case "Use native XNT vaults":
         return "admin_sync_vaults";
       case "Recalc network HP":
@@ -618,6 +621,31 @@ export function AdminDashboard() {
           admin: publicKey,
           config: deriveConfigPda(),
           treasuryVault: config.treasuryVault,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+      return sig;
+    });
+  };
+
+  const onWithdrawStakingRewards = async () => {
+    if (!anchorWallet || !config || !mintDecimals || !publicKey) return;
+    let amountBase: bigint;
+    try {
+      amountBase = parseUiAmountToBase(stakingWithdrawUi, mintDecimals.xnt);
+    } catch (e: unknown) {
+      setError(formatError(e));
+      return;
+    }
+    if (amountBase <= 0n) return;
+    const program = getProgram(connection, anchorWallet);
+    await withTx("Withdraw staking rewards", async () => {
+      const sig = await program.methods
+        .adminWithdrawStakingRewards(new BN(amountBase.toString()))
+        .accounts({
+          admin: publicKey,
+          config: deriveConfigPda(),
+          stakingRewardVault: config.stakingRewardVault,
           systemProgram: SystemProgram.programId,
         })
         .rpc();
@@ -916,6 +944,22 @@ export function AdminDashboard() {
             <Input value={treasuryWithdrawUi} onChange={setTreasuryWithdrawUi} />
             <Button className="mt-4" onClick={() => void onWithdrawTreasury()} disabled={!isAdmin || busy != null}>
               {busy === "Withdraw treasury" ? "Submitting..." : "Withdraw to admin wallet"}
+            </Button>
+          </Card>
+
+          <Card className="p-4">
+            <div className="text-sm font-semibold">Withdraw staking rewards</div>
+            <div className="mt-2 text-xs text-zinc-400">
+              Transfer XNT from the staking reward vault to the admin wallet.
+            </div>
+            <div className="mt-3 text-xs text-zinc-400">Amount (XNT)</div>
+            <Input value={stakingWithdrawUi} onChange={setStakingWithdrawUi} />
+            <Button
+              className="mt-4"
+              onClick={() => void onWithdrawStakingRewards()}
+              disabled={!isAdmin || busy != null}
+            >
+              {busy === "Withdraw staking rewards" ? "Submitting..." : "Withdraw to admin wallet"}
             </Button>
           </Card>
 
