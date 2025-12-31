@@ -3002,44 +3002,6 @@ export function PublicDashboard() {
             <div className="mt-5 text-xs text-zinc-500">
               Your stake: {stakeSummary} · Your share: {stakeShareRounded}
             </div>
-            <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3">
-              <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-400">
-                Claim split
-              </div>
-              <div className="mt-3 flex items-center justify-between text-xs text-zinc-400">
-                <span>To rXNT</span>
-                <span>{claimRipperPctClamped}%</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                step="5"
-                value={claimRipperPct}
-                onChange={(event) => setClaimRipperPct(Number(event.target.value))}
-                className="mt-2 w-full accent-emerald-300"
-              />
-              <div className="mt-3 text-[11px] text-zinc-500">
-                Wallet: {claimWalletLabel} XNT
-              </div>
-              <div className="text-[11px] text-zinc-500">
-                rXNT: {claimRipperNetLabel} XNT · Fee {claimRipperFeeLabel} XNT
-              </div>
-              <div className="text-[11px] text-zinc-500">
-                Estimated rXNT: {claimRipperEstimateLabel} rXNT
-              </div>
-              <Button
-                className="mt-3 w-full"
-                onClick={() => void onClaimRipperSplit()}
-                disabled={claimSplitDisabled}
-                title={claimSplitHint}
-              >
-                {busy === "Claim + stake rXNT" ? "Claiming..." : "Claim now"}
-              </Button>
-              <div className="mt-2 text-[10px] text-zinc-500">
-                0.2% fee on the rXNT portion goes back to the rewards vault.
-              </div>
-            </div>
           </Card>
         </section>
 
