@@ -45,7 +45,7 @@ const MIND_DECIMALS: u64 = 1_000_000_000;
 const MIND_DECIMALS_U8: u8 = 9;
 const XP_SECONDS_PER_POINT_DENOMINATOR: u64 = 36_000;
 const RIG_BUFF_CAP_BPS: u16 = 1_500; // 15%
-const LEVELING_ENABLED: bool = false;
+const LEVELING_ENABLED: bool = true;
 
 #[program]
 pub mod mining_v2 {
