@@ -284,6 +284,10 @@ const RISK_HELPER_TEXT =
 
 const EXCLUDED_MIND_LP_ADDRESS = "Cjk6T9VU2N4eUXC3E5TzazJjwUeMrC25xdJyqf3F1s2z";
 const EXCLUDED_MIND_LP_OWNER = new PublicKey(EXCLUDED_MIND_LP_ADDRESS);
+const EXCLUDED_MIND_OWNERS = [
+  EXCLUDED_MIND_LP_OWNER,
+  new PublicKey("1nc1nerator11111111111111111111111111111111"),
+];
 
 const CONTRACTS = RIG_PLANS.map((plan, key) => ({
   key,
@@ -617,15 +621,17 @@ export function PublicDashboard() {
       setMintDecimals({ xnt: xntDecimals, mind: mindMintInfo.decimals });
       let sharePct: number | null = null;
       try {
-        const excludedAccounts = await connection.getTokenAccountsByOwner(
-          EXCLUDED_MIND_LP_OWNER,
-          { mint: cfg.mindMint },
-          "confirmed"
-        );
         let excludedBalance = 0n;
-        for (const entry of excludedAccounts.value) {
-          const decoded = AccountLayout.decode(entry.account.data.slice(0, AccountLayout.span));
-          excludedBalance += decoded.amount;
+        for (const owner of EXCLUDED_MIND_OWNERS) {
+          const excludedAccounts = await connection.getTokenAccountsByOwner(
+            owner,
+            { mint: cfg.mindMint },
+            "confirmed"
+          );
+          for (const entry of excludedAccounts.value) {
+            const decoded = AccountLayout.decode(entry.account.data.slice(0, AccountLayout.span));
+            excludedBalance += decoded.amount;
+          }
         }
         const circulatingBalance =
           mindMintInfo.supply > excludedBalance ? mindMintInfo.supply - excludedBalance : 0n;
