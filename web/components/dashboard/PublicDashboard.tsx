@@ -40,6 +40,7 @@ import type { DecodedUserStake } from "@/lib/decoders";
 import {
   decodeMinerPositionAccount,
   decodeUserMiningProfileAccount,
+  decodeUserStakeAccount,
   MINER_POSITION_LEN_V1,
   MINER_POSITION_LEN_V2,
   USER_STAKE_LEN,
@@ -69,6 +70,7 @@ const LEVEL_CAP = 6;
 const LEVEL_THRESHOLDS = [0n, 500n, 2_000n, 5_000n, 10_000n, 16_000n] as const;
 const LEVEL_BONUS_BPS = [0, 160, 340, 550, 780, 1000] as const;
 const LEVEL_UP_COSTS = [150, 350, 900, 2_000, 4_000] as const;
+const DAY_SECONDS = 86_400n;
 const STAKING_SECONDS_PER_YEAR = 31_536_000;
 const XNT_DECIMALS = 9;
 const NATIVE_VAULT_SPACE = 9;
@@ -210,6 +212,13 @@ const ACTIVE_STAKERS: Array<{
     reward: "0.0526",
   },
 ];
+
+type ActiveStaker = {
+  owner: string;
+  staked: string;
+  share: string;
+  reward: string;
+};
 
 const RIG_PLAN_BY_TYPE: Record<RigType, RigPlan> = {
   starter: RIG_PLANS[0],
@@ -495,6 +504,16 @@ export function PublicDashboard() {
   const [activeRigTotal, setActiveRigTotal] = useState(0);
   const [networkBreakdown, setNetworkBreakdown] = useState<NetworkHpBreakdown | null>(null);
   const [leaderboardRows, setLeaderboardRows] = useState<LeaderboardRow[]>([]);
+  const [activeStakersSummary, setActiveStakersSummary] = useState<{
+    unique: number;
+    totalStaked: string;
+    updated: number | null;
+  }>({
+    unique: ACTIVE_STAKERS_SUMMARY.unique,
+    totalStaked: ACTIVE_STAKERS_SUMMARY.totalStaked,
+    updated: ACTIVE_STAKERS_SUMMARY.updated,
+  });
+  const [activeStakers, setActiveStakers] = useState<ActiveStaker[]>(ACTIVE_STAKERS);
 
   const [selectedContract, setSelectedContract] = useState<number>(1);
   const [openRigDetails, setOpenRigDetails] = useState<RigType | null>(null);
@@ -618,6 +637,48 @@ export function PublicDashboard() {
       }
       if (isStale()) return;
       setStakingShareOfCirculating(sharePct);
+      try {
+        const stakeAccounts = await connection.getProgramAccounts(getProgramId(), {
+          commitment: "confirmed",
+          filters: [{ dataSize: USER_STAKE_LEN }],
+        });
+        if (isStale()) return;
+        let totalStaked = 0n;
+        const stakes: Array<{ owner: string; staked: bigint }> = [];
+        for (const entry of stakeAccounts) {
+          const decoded = tryDecodeUserStakeAccount(entry.account.data);
+          if (!decoded) continue;
+          if (!decoded.owner || decoded.stakedMind === 0n) continue;
+          const ownerPk = new PublicKey(decoded.owner);
+          stakes.push({ owner: ownerPk.toBase58(), staked: decoded.stakedMind });
+          totalStaked += decoded.stakedMind;
+        }
+        if (stakes.length > 0 && totalStaked > 0n) {
+          const rewardPerDayBase =
+            BigInt(cfg.stakingRewardRateXntPerSec.toString()) * BigInt(DAY_SECONDS);
+          const totalStakedNum = Number(totalStaked);
+          const top = stakes
+            .sort((a, b) => (a.staked > b.staked ? -1 : 1))
+            .map((s) => {
+              const sharePct = totalStakedNum > 0 ? (Number(s.staked) / totalStakedNum) * 100 : 0;
+              const rewardBase = (rewardPerDayBase * s.staked) / totalStaked;
+              return {
+                owner: s.owner,
+                staked: formatTokenAmount(s.staked, mindMintInfo.decimals, 4),
+                share: `${sharePct.toFixed(2)}%`,
+                reward: formatTokenAmount(rewardBase, xntDecimals, 4),
+              };
+            });
+          setActiveStakersSummary({
+            unique: stakes.length,
+            totalStaked: formatTokenAmount(totalStaked, mindMintInfo.decimals, 4),
+            updated: Number(ts),
+          });
+          setActiveStakers(top);
+        }
+      } catch (err) {
+        console.warn("Failed to load active stakers", err);
+      }
       try {
         const pool = await fetchRipperStakePool(connection);
         if (isStale()) return;
@@ -3118,8 +3179,9 @@ export function PublicDashboard() {
             <div className="mt-6 border-t border-white/10 pt-4">
               <div className="text-sm font-semibold">Active stakers</div>
               <div className="mt-1 text-[11px] text-zinc-400">
-                Unique addresses: {ACTIVE_STAKERS_SUMMARY.unique} | Total staked: {ACTIVE_STAKERS_SUMMARY.totalStaked} MIND | Updated{" "}
-                {ACTIVE_STAKERS_SUMMARY.updated}
+                Unique addresses: {activeStakersSummary.unique ?? ACTIVE_STAKERS_SUMMARY.unique} | Total staked:{" "}
+                {activeStakersSummary.totalStaked ?? ACTIVE_STAKERS_SUMMARY.totalStaked} MIND | Updated{" "}
+                {activeStakersSummary.updated ?? ACTIVE_STAKERS_SUMMARY.updated}
               </div>
               <div className="mt-3 max-h-48 overflow-y-auto">
                 <table className="min-w-full text-left text-[11px] text-zinc-300">
@@ -3132,7 +3194,7 @@ export function PublicDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {ACTIVE_STAKERS.map((staker) => (
+                    {(activeStakers.length > 0 ? activeStakers : ACTIVE_STAKERS).map((staker) => (
                       <tr key={staker.owner} className="border-b border-white/5">
                         <td className="py-2 align-top font-mono text-[11px] text-white">{staker.owner}</td>
                         <td className="py-2">{staker.staked}</td>
