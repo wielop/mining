@@ -287,6 +287,7 @@ const EXCLUDED_MIND_LP_OWNER = new PublicKey(EXCLUDED_MIND_LP_ADDRESS);
 const EXCLUDED_MIND_OWNERS = [
   EXCLUDED_MIND_LP_OWNER,
   new PublicKey("1nc1nerator11111111111111111111111111111111"),
+  new PublicKey("9Dpjw2pB5kXJr6ZTHiqzEMfJPic3om9jgNacnwpLCoaU"),
 ];
 
 const CONTRACTS = RIG_PLANS.map((plan, key) => ({
