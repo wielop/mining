@@ -1492,7 +1492,7 @@ export function PublicDashboard() {
     epochCountdown != null ? `Next epoch resets in ${formatDurationSeconds(epochCountdown)}` : undefined;
 
   const claimableRounded =
-    mintDecimals != null ? formatRoundedToken(totalPendingMind, mintDecimals.mind) : "-";
+    mintDecimals != null ? formatRoundedToken(totalPendingMind, mintDecimals.mind, 6) : "-";
   const claimableFull =
     mintDecimals != null ? formatFullPrecisionToken(totalPendingMind, mintDecimals.mind) : "-";
   const claimableTinyThreshold =
@@ -1567,7 +1567,7 @@ export function PublicDashboard() {
   const stakingApyDisplay = formatPercent(stakingApyPct);
   const lastClaimRounded =
     mintDecimals && lastClaimAmount != null
-      ? formatRoundedToken(lastClaimAmount, mintDecimals.mind)
+      ? formatRoundedToken(lastClaimAmount, mintDecimals.mind, 6)
       : null;
   const lastClaimAgo =
     lastClaimTs != null
