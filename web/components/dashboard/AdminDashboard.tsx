@@ -136,6 +136,13 @@ export function AdminDashboard() {
   const [activeStakerTotal, setActiveStakerTotal] = useState(0);
   const [activeStakedTotal, setActiveStakedTotal] = useState<bigint>(0n);
   const [activeStakerUpdated, setActiveStakerUpdated] = useState<number | null>(null);
+  const [hpHistory, setHpHistory] = useState<
+    Array<{ ts: number; baseHp: bigint; buffHp: bigint; effectiveHp: bigint }>
+  >([]);
+  const [hpHistoryUpdated, setHpHistoryUpdated] = useState<number | null>(null);
+  const [hpRangeHours, setHpRangeHours] = useState<number>(24 * 7);
+  const [hpStepHours, setHpStepHours] = useState<number>(6);
+  const [hpHistoryLoading, setHpHistoryLoading] = useState(false);
 
   const [emissionPerDayUi, setEmissionPerDayUi] = useState<string>("");
   const [maxEffectiveHpUi, setMaxEffectiveHpUi] = useState<string>("");
@@ -171,6 +178,47 @@ export function AdminDashboard() {
       active = false;
     };
   }, [connection]);
+
+  useEffect(() => {
+    let active = true;
+    const loadHistory = async () => {
+      setHpHistoryLoading(true);
+      try {
+        const params = new URLSearchParams({
+          hours: hpRangeHours.toString(),
+          stepHours: hpStepHours.toString(),
+        });
+        const res = await fetch(`/api/admin/hp-history?${params.toString()}`);
+        if (!res.ok) {
+          throw new Error(await res.text());
+        }
+        const data: {
+          points: Array<{ ts: number; baseHp: string; buffHp: string; effectiveHp: string }>;
+        } = await res.json();
+        if (!active) return;
+        setHpHistory(
+          data.points.map((p) => ({
+            ts: p.ts,
+            baseHp: BigInt(p.baseHp),
+            buffHp: BigInt(p.buffHp),
+            effectiveHp: BigInt(p.effectiveHp),
+          }))
+        );
+        setHpHistoryUpdated(Math.floor(Date.now() / 1000));
+      } catch (err) {
+        if (!active) return;
+        setHpHistory([]);
+        setHpHistoryUpdated(null);
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        if (active) setHpHistoryLoading(false);
+      }
+    };
+    void loadHistory();
+    return () => {
+      active = false;
+    };
+  }, [hpRangeHours, hpStepHours]);
 
   const stakingEpochBalances = useMemo(() => {
     if (!config) return null;
@@ -487,6 +535,25 @@ export function AdminDashboard() {
       await refresh();
     }
   };
+
+  const hpHistoryView = useMemo(() => {
+    if (hpHistory.length === 0) return null;
+    const toNumber = (v: bigint) => Number(v) / Number(HP_SCALE);
+    const points = hpHistory.map((p) => ({
+      ts: p.ts,
+      effective: toNumber(p.effectiveHp),
+    }));
+    const min = Math.min(...points.map((p) => p.effective));
+    const max = Math.max(...points.map((p) => p.effective));
+    const span = Math.max(1, max - min);
+    const normalized = points.map((p, idx) => ({
+      x: points.length === 1 ? 0 : (idx / (points.length - 1)) * 100,
+      y: ((p.effective - min) / span) * 100,
+      ts: p.ts,
+      val: p.effective,
+    }));
+    return { points: normalized, min, max };
+  }, [hpHistory]);
 
   const onUpdateConfig = async () => {
     if (!anchorWallet || !config || !mintDecimals) return;
@@ -840,6 +907,70 @@ export function AdminDashboard() {
             </div>
           </Card>
         </div>
+
+        <Card className="mt-4 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold">HP history (effective)</div>
+              <div className="mt-1 text-xs text-zinc-400">
+                Zakres: {hpRangeHours}h | Krok: {hpStepHours}h
+                {hpHistoryUpdated ? ` | Updated ${hpHistoryUpdated}` : ""}
+              </div>
+            </div>
+            <div className="flex gap-2 text-xs text-black">
+              <select
+                className="rounded bg-white/80 px-2 py-1 text-sm text-black"
+                value={hpRangeHours}
+                onChange={(e) => setHpRangeHours(Number(e.target.value))}
+              >
+                <option value={24}>24h</option>
+                <option value={24 * 3}>3d</option>
+                <option value={24 * 7}>7d</option>
+                <option value={24 * 14}>14d</option>
+              </select>
+              <select
+                className="rounded bg-white/80 px-2 py-1 text-sm text-black"
+                value={hpStepHours}
+                onChange={(e) => setHpStepHours(Number(e.target.value))}
+              >
+                <option value={6}>co 6h</option>
+                <option value={12}>co 12h</option>
+                <option value={24}>co 24h</option>
+              </select>
+            </div>
+          </div>
+          <div className="mt-3 min-h-[180px]">
+            {hpHistoryLoading && <div className="text-xs text-zinc-500">Loading...</div>}
+            {!hpHistoryLoading && !hpHistoryView && (
+              <div className="text-xs text-zinc-500">Brak danych do wyświetlenia.</div>
+            )}
+            {hpHistoryView ? (
+              <div className="mt-2">
+                <svg viewBox="0 0 100 40" className="h-40 w-full">
+                  <polyline
+                    fill="none"
+                    stroke="#4ade80"
+                    strokeWidth="0.5"
+                    points={hpHistoryView.points
+                      .map((p) => `${p.x},${40 - (p.y * 0.35 + 5)}`)
+                      .join(" ")}
+                  />
+                  <line x1="0" y1="35" x2="100" y2="35" stroke="#ffffff22" strokeWidth="0.2" />
+                  <text x="0" y="39" fontSize="2" fill="#9ca3af">
+                    min {hpHistoryView.min.toFixed(2)}
+                  </text>
+                  <text x="60" y="5" fontSize="2" fill="#9ca3af">
+                    max {hpHistoryView.max.toFixed(2)}
+                  </text>
+                </svg>
+                <div className="mt-2 text-xs text-zinc-400">
+                  Ostatni punkt: {hpHistoryView.points[hpHistoryView.points.length - 1]?.val.toFixed(2)} HP
+                  {" | "}Start: {hpHistoryView.points[0]?.val.toFixed(2)} HP
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </Card>
 
         <Card className="mt-4 p-4">
           <div className="text-sm font-semibold">Active miners</div>
