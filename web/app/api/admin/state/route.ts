@@ -248,6 +248,7 @@ export async function GET() {
       totalStakedMind: toUi(cfg.stakingTotalStakedMind, mindMintInfo.decimals),
       rewardPoolXnt: toUi(currentEpochRewardBase, XNT_DECIMALS),
       epochEndsAt: cfg.stakingEpochEndTs > 0 ? new Date(cfg.stakingEpochEndTs * 1000).toISOString() : null,
+      epochSeconds: epochSeconds > 0 ? Number(epochSeconds) : null,
     },
     treasury: {
       totalXntIn: toUi(rewardPoolAvailable + treasuryAvailable, XNT_DECIMALS),

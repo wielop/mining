@@ -114,6 +114,8 @@ export function AdminDataDashboard() {
   const [state, setState] = useState<AdminState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [window, setWindow] = useState<FlowStats["window"]>("24h");
+  const [mindPriceXnt, setMindPriceXnt] = useState<string>("1");
+  const [mindPriceApplied, setMindPriceApplied] = useState<number | null>(1);
 
   const fetchState = useCallback(async () => {
     try {
@@ -169,15 +171,17 @@ export function AdminDataDashboard() {
     [state, window]
   );
   const stakingAprPct = useMemo(() => {
-    if (!config || !state) return null;
-    if (config.stakingRewardRateXntPerSec === 0n) return 0;
+    if (!state) return null;
     const totalStaked = state.snapshot.staking.totalStakedMind;
-    if (totalStaked <= 0) return 0;
-    const rewardPerSec = Number(config.stakingRewardRateXntPerSec) / 10 ** XNT_DECIMALS;
-    if (!Number.isFinite(rewardPerSec) || !Number.isFinite(totalStaked) || totalStaked <= 0) return null;
-    const apr = (rewardPerSec * STAKING_SECONDS_PER_YEAR) / totalStaked;
+    const epochSeconds = state.snapshot.staking.epochSeconds ?? 0;
+    const price = mindPriceApplied;
+    if (!price || price <= 0 || epochSeconds <= 0 || totalStaked <= 0) return null;
+    const rewardTotal = state.snapshot.staking.rewardPoolXnt; // XNT allocated for the current epoch
+    const rewardPerSec = rewardTotal / epochSeconds;
+    if (!Number.isFinite(rewardPerSec)) return null;
+    const apr = (rewardPerSec * STAKING_SECONDS_PER_YEAR) / (totalStaked * price);
     return apr * 100;
-  }, [config, state]);
+  }, [state, mindPriceApplied]);
 
   const onResolve = async (id: string) => {
     try {
@@ -251,6 +255,40 @@ export function AdminDataDashboard() {
                     Reward pool (current epoch): {formatToken(state.snapshot.staking.rewardPoolXnt)} XNT
                   </div>
                   <div>APR: {formatPercent(stakingAprPct)}</div>
+                  <div className="text-[11px] text-zinc-500">
+                    Liczone: rewardTotal / epochSeconds * rok / (staked * MIND/XNT)
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    <div className="text-xs uppercase tracking-[0.2em] text-zinc-400">
+                      MIND/XNT (manual)
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.0001"
+                        value={mindPriceXnt}
+                        onChange={(e) => setMindPriceXnt(e.target.value)}
+                        className="w-32 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-sm text-white"
+                      />
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={() => {
+                          const parsed = Number(mindPriceXnt);
+                          setMindPriceApplied(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
+                        }}
+                      >
+                        Ustaw cenę
+                      </Button>
+                    </div>
+                    <div className="text-[11px] text-zinc-500">
+                      Bieżąca cena:{" "}
+                      {mindPriceApplied && mindPriceApplied > 0
+                        ? `${mindPriceApplied} XNT/MIND`
+                        : "brak (podaj ręcznie)"}
+                    </div>
+                  </div>
                   <div>Epoch ends: {formatTimestamp(state.snapshot.staking.epochEndsAt)}</div>
                 </div>
               </Card>

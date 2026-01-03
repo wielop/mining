@@ -12,6 +12,7 @@ export type ProtocolSnapshot = {
     totalStakedMind: number;
     rewardPoolXnt: number;
     epochEndsAt: string | null;
+    epochSeconds: number | null;
   };
   treasury: {
     totalXntIn: number;
