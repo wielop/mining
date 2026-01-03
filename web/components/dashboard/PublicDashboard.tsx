@@ -87,9 +87,9 @@ const HP_SCALE = 100n;
 const GRACE_DAYS = 2;
 const RENEW_REMINDER_DAYS = 3;
 const TX_SIZE_LIMIT_BYTES = 1232;
-// Address-lookup extend instructions exceed the legacy size limit above ~24 keys; keep margin.
+// Keep extend instructions safely under the packet limit (25+ keys overflows legacy tx size).
 const LOOKUP_CHUNK_SIZE = 32;
-// Solana v0 messages top out near 256 total accounts; leave headroom for ATA setup & program accounts.
+// Solana caps account indexes at 256; leave headroom for program + ATA accounts.
 const LEVEL_UP_MAX_POSITIONS = 220;
 type RigType = "starter" | "pro" | "industrial";
 type LeaderboardRow = {
@@ -834,7 +834,7 @@ export function PublicDashboard() {
         const leaderboardMap = new Map<string, LeaderboardRow>();
         for (const entry of allPositions) {
           const decoded = decodeMinerPositionAccount(Buffer.from(entry.account.data));
-          if (decoded.deactivated || decoded.endTs <= now) continue;
+          if (decoded.deactivated || decoded.expired || decoded.endTs <= now) continue;
           const ownerKey = new PublicKey(decoded.owner).toBase58();
           unique.add(ownerKey);
           rigs += 1;
@@ -2130,7 +2130,9 @@ export function PublicDashboard() {
       const instructions = ix ? [ix, levelUpIx] : [levelUpIx];
 
       const sendLevelUpWithLookupTable = async () => {
-        const positionPubkeys = remainingAccounts.map((entry) => entry.pubkey);
+        const positionPubkeys = Array.from(
+          new Set(remainingAccounts.map((entry) => entry.pubkey.toBase58()))
+        ).map((value) => new PublicKey(value));
         const currentSlot = await connection.getSlot("confirmed");
         const [createIx, lookupTableAddress] = AddressLookupTableProgram.createLookupTable({
           authority: publicKey,
@@ -2161,6 +2163,12 @@ export function PublicDashboard() {
           instructions,
         }).compileToV0Message([lookupTableAccount]);
         const versionedTx = new VersionedTransaction(message);
+        const versionedSize = versionedTx.serialize().length;
+        if (versionedSize > TX_SIZE_LIMIT_BYTES) {
+          throw new Error(
+            `Level up transaction is too large (${versionedSize} bytes). Let some rigs expire and try again.`
+          );
+        }
         let signed: VersionedTransaction;
         if (signAllTransactions) {
           const [first] = await signAllTransactions([versionedTx]);
