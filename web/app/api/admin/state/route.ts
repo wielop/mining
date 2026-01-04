@@ -29,7 +29,8 @@ const WINDOW_10M = 10 * 60 * 1000;
 const BURN_BPS = 600n;
 const SIGNATURE_PAGE_LIMIT = 1000;
 const TX_BATCH_SIZE = 25;
-const BURN_CACHE_MS = 5 * 60 * 1000;
+// Admin dashboard polls every 30s, keep burn stats cache short to stay fresh.
+const BURN_CACHE_MS = 60 * 1000;
 const UNSTAKE_EVENT_DISCRIMINATOR = createHash("sha256")
   .update("event:MindUnstaked")
   .digest()
