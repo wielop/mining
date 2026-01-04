@@ -365,36 +365,8 @@ pub mod mining_v2 {
                 update_mining_global(cfg, now)?;
             }
 
-            let mut base_total_scaled_other: u128 = 0;
-            let mut buffed_total_scaled_other: u128 = 0;
-            for info in ctx.remaining_accounts.iter() {
-                let entry = load_position_any(info)?;
-                if entry.owner != profile.owner {
-                    continue;
-                }
-                if entry.deactivated || entry.expired || now >= entry.end_ts {
-                    continue;
-                }
-                if info.key == &ctx.accounts.position.key() {
-                    continue;
-                }
-                let rig_type = position_rig_type(&entry, cfg)?;
-                let base_hp_scaled = position_base_hp_scaled(&entry)?;
-                let buff_bps = position_buff_bps(&entry, rig_type, now);
-                base_total_scaled_other = base_total_scaled_other
-                    .checked_add(base_hp_scaled)
-                    .ok_or(ErrorCode::MathOverflow)?;
-                let buffed = apply_bps(base_hp_scaled, buff_bps)?;
-                buffed_total_scaled_other = buffed_total_scaled_other
-                    .checked_add(buffed)
-                    .ok_or(ErrorCode::MathOverflow)?;
-            }
-            let base_total_scaled = base_total_scaled_other;
-            let profile_hp_scaled = profile.active_hp as u128;
-            require!(
-                base_total_scaled == profile_hp_scaled,
-                ErrorCode::InvalidRigBuffPositions
-            );
+            let base_total_scaled_other = profile.active_hp as u128;
+            let buffed_total_scaled_other = profile.buffed_hp as u128;
 
             let renewed_base_hp_scaled = base_hp_scaled as u128;
             let renewed_buff_bps = rig_buff_bps(rig_type, new_buff_level);
@@ -566,43 +538,19 @@ pub mod mining_v2 {
             update_mining_global(cfg, now)?;
         }
 
-        let mut base_total_scaled_other: u128 = 0;
-        let mut buffed_total_scaled_other: u128 = 0;
-        for info in ctx.remaining_accounts.iter() {
-            let entry = load_position_any(info)?;
-            if entry.owner != profile.owner {
-                continue;
-            }
-            if entry.deactivated || entry.expired || now >= entry.end_ts {
-                continue;
-            }
-            if info.key == &ctx.accounts.position.key() {
-                continue;
-            }
-            let rig_type = position_rig_type(&entry, cfg)?;
-            let base_hp_scaled = position_base_hp_scaled(&entry)?;
-            let buff_bps = position_buff_bps(&entry, rig_type, now);
-            base_total_scaled_other = base_total_scaled_other
-                .checked_add(base_hp_scaled)
-                .ok_or(ErrorCode::MathOverflow)?;
-            let buffed = apply_bps(base_hp_scaled, buff_bps)?;
-            buffed_total_scaled_other = buffed_total_scaled_other
-                .checked_add(buffed)
-                .ok_or(ErrorCode::MathOverflow)?;
-        }
         let base_hp_scaled_current = position_base_hp_scaled(&position)?;
-        let base_total_scaled = if is_early {
-            base_total_scaled_other
-                .checked_add(base_hp_scaled_current)
-                .ok_or(ErrorCode::MathOverflow)?
+        let profile_active = profile.active_hp as u128;
+        let profile_buffed = profile.buffed_hp as u128;
+        let (base_total_scaled_other, buffed_total_scaled_other) = if is_early {
+            let buff_bps = position_buff_bps(&position, rig_type, now);
+            let buffed_current = apply_bps(base_hp_scaled_current, buff_bps)?;
+            (
+                profile_active.saturating_sub(base_hp_scaled_current),
+                profile_buffed.saturating_sub(buffed_current),
+            )
         } else {
-            base_total_scaled_other
+            (profile_active, profile_buffed)
         };
-        let profile_hp_scaled = profile.active_hp as u128;
-        require!(
-            base_total_scaled == profile_hp_scaled,
-            ErrorCode::InvalidRigBuffPositions
-        );
 
         let renewed_base_hp_scaled = base_hp_scaled as u128;
         let renewed_buff_bps = rig_buff_bps(rig_type, new_buff_level);

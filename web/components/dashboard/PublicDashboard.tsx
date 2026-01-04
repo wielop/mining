@@ -4,7 +4,7 @@ import "@/lib/polyfillBufferClient";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAnchorWallet, useConnection, useWallet } from "@solana/wallet-adapter-react";
 import { BN } from "@coral-xyz/anchor";
-import { Keypair, PublicKey, SystemProgram, Transaction, type AccountMeta } from "@solana/web3.js";
+import { Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import {
   AccountLayout,
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -1921,17 +1921,8 @@ export function PublicDashboard() {
       return;
     }
     const program = getProgram(connection, anchorWallet);
-    const activePositions = positions.filter(
-      (entry) =>
-        !entry.data.deactivated && nowTs < entry.data.endTs && entry.pubkey !== posPubkey
-    );
     await withTx("Renew with buff", async () => {
       const { ata, ix } = await ensureAta(publicKey, config.mindMint);
-      const remainingAccounts: AccountMeta[] = activePositions.map((entry) => ({
-        pubkey: new PublicKey(entry.pubkey),
-        isSigner: false,
-        isWritable: true,
-      }));
       const tx = new Transaction();
       if (ix) tx.add(ix);
       const instruction = await program.methods
@@ -1951,7 +1942,6 @@ export function PublicDashboard() {
           tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
-        .remainingAccounts(remainingAccounts)
         .instruction();
       tx.add(instruction);
       return await program.provider.sendAndConfirm(tx, []);
@@ -1966,16 +1956,7 @@ export function PublicDashboard() {
       return;
     }
     const program = getProgram(connection, anchorWallet);
-    const activePositions = positions.filter(
-      (entry) =>
-        !entry.data.deactivated && nowTs < entry.data.endTs && entry.pubkey !== posPubkey
-    );
     await withTx("Renew", async () => {
-      const remainingAccounts: AccountMeta[] = activePositions.map((entry) => ({
-        pubkey: new PublicKey(entry.pubkey),
-        isSigner: false,
-        isWritable: true,
-      }));
       const sig = await program.methods
         .renewRig()
         .accounts({
@@ -1987,7 +1968,6 @@ export function PublicDashboard() {
           treasuryVault: config.treasuryVault,
           systemProgram: SystemProgram.programId,
         })
-        .remainingAccounts(remainingAccounts)
         .rpc();
       return sig;
     });
