@@ -2900,15 +2900,6 @@ export function PublicDashboard() {
                           positionRateHp) /
                         networkHpHundredths
                       : null;
-                  const pendingNow = entry.livePending;
-                  const pendingLabel =
-                    mintDecimals != null
-                      ? formatRoundedToken(pendingNow, mintDecimals.mind, 6)
-                      : "-";
-                  const pendingFull =
-                    mintDecimals != null
-                      ? formatFullPrecisionToken(pendingNow, mintDecimals.mind)
-                      : "-";
                   return (
                     <div key={p.pubkey} className="rounded-2xl border border-white/10 bg-white/5 p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2993,12 +2984,6 @@ export function PublicDashboard() {
                           ) : (
                             <div>Rate unavailable</div>
                           )}
-                          <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-400">
-                            <span>Claimable now</span>
-                            <span className="text-zinc-200" title={`${pendingFull} MIND`}>
-                              {pendingLabel} MIND
-                            </span>
-                          </div>
                         </div>
                       ) : null}
                       {showRenew ? (
