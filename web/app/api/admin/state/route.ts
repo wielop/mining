@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { Connection, PublicKey } from "@solana/web3.js";
 import { getMint } from "@solana/spl-token";
 import { createHash } from "crypto";
@@ -117,8 +117,12 @@ const parseUnstakeEventsFromLogs = (logs: string[]) => {
   return events;
 };
 
-const collectBurnStats = async (connection: Connection, mindDecimals: number): Promise<BurnStats> => {
-  if (burnsCache && Date.now() - burnsCache.ts < BURN_CACHE_MS) {
+const collectBurnStats = async (
+  connection: Connection,
+  mindDecimals: number,
+  forceRefresh = false
+): Promise<BurnStats> => {
+  if (!forceRefresh && burnsCache && Date.now() - burnsCache.ts < BURN_CACHE_MS) {
     return burnsCache.data;
   }
   const programId = getProgramId();
@@ -206,7 +210,7 @@ const collectBurnStats = async (connection: Connection, mindDecimals: number): P
 };
 
 // Data Center API: aggregates on-chain state + simple alert rules.
-export async function GET() {
+export async function GET(request: NextRequest) {
   const connection = new Connection(getRpcUrl(), "confirmed");
   const cfg = await fetchConfig(connection);
   if (!cfg) {
@@ -217,7 +221,8 @@ export async function GET() {
   const mindMintInfo = await getMint(connection, cfg.mindMint, "confirmed");
   const dailyEmissionBase = cfg.emissionPerSec * cfg.secondsPerDay;
   const totalMindMined = toUi(mindMintInfo.supply, mindMintInfo.decimals);
-  const burns = await collectBurnStats(connection, mindMintInfo.decimals ?? 9);
+  const forceBurnRefresh = request.nextUrl.searchParams.get("forceBurnRefresh") === "1";
+  const burns = await collectBurnStats(connection, mindMintInfo.decimals ?? 9, forceBurnRefresh);
 
   const rentLamports = BigInt(
     await connection.getMinimumBalanceForRentExemption(NATIVE_VAULT_SPACE)

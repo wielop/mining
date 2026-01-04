@@ -118,10 +118,11 @@ export function AdminDataDashboard() {
   const [mindPriceApplied, setMindPriceApplied] = useState<number | null>(1);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchState = useCallback(async () => {
+  const fetchState = useCallback(async (options?: { forceBurnRefresh?: boolean }) => {
     try {
       setError(null);
-      const res = await fetch("/api/admin/state", { cache: "no-store" });
+      const query = options?.forceBurnRefresh ? "?forceBurnRefresh=1" : "";
+      const res = await fetch(`/api/admin/state${query}`, { cache: "no-store" });
       if (!res.ok) {
         throw new Error(`API error ${res.status}`);
       }
@@ -197,7 +198,7 @@ export function AdminDataDashboard() {
   const refreshNow = useCallback(async () => {
     try {
       setRefreshing(true);
-      await fetchState();
+      await fetchState({ forceBurnRefresh: true });
     } finally {
       setRefreshing(false);
     }
