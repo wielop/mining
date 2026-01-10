@@ -17,6 +17,9 @@ const STAKE_SEED: &[u8] = b"stake";
 const LEVEL_CONFIG_SEED: &[u8] = b"level_config";
 const HP_SCALE_SEED: &[u8] = b"hp_scale";
 const RIG_BUFF_CONFIG_SEED: &[u8] = b"rig_buff";
+const YIELD_CONFIG_SEED: &[u8] = b"yield_config";
+const YIELD_VAULT_SEED: &[u8] = b"yield_vault";
+const YIELD_USER_SEED: &[u8] = b"yield_user";
 
 const BPS_DENOMINATOR: u128 = 10_000;
 const ACC_SCALE: u128 = 1_000_000_000_000_000_000;
@@ -46,6 +49,8 @@ const MIND_DECIMALS_U8: u8 = 9;
 const XP_SECONDS_PER_POINT_DENOMINATOR: u64 = 36_000;
 const RIG_BUFF_CAP_BPS: u16 = 1_500; // 15%
 const LEVELING_ENABLED: bool = true;
+const YIELD_EPOCH_SECONDS: i64 = 7 * 24 * 60 * 60;
+const YIELD_EPOCH_TARGET_SECONDS: i64 = 20 * 60 * 60;
 
 #[program]
 pub mod mining_v2 {
@@ -172,6 +177,114 @@ pub mod mining_v2 {
             ErrorCode::Unauthorized
         );
         ctx.accounts.rig_buff_config.mind_per_hp_per_day = params.mind_per_hp_per_day;
+        Ok(())
+    }
+
+    pub fn init_yield_config(ctx: Context<InitYieldConfig>) -> Result<()> {
+        let cfg = &ctx.accounts.config;
+        require_keys_eq!(cfg.admin, ctx.accounts.admin.key(), ErrorCode::Unauthorized);
+        let now = Clock::get()?.unix_timestamp;
+        let yield_cfg = &mut ctx.accounts.yield_config;
+        yield_cfg.admin = cfg.admin;
+        yield_cfg.current_pool_xnt = 0;
+        yield_cfg.next_pool_xnt = 0;
+        yield_cfg.epoch_id = 0;
+        yield_cfg.epoch_end_ts = next_yield_epoch_end(now)?;
+        yield_cfg.total_weight = 0;
+        yield_cfg.bump = *ctx.bumps.get("yield_config").unwrap();
+        yield_cfg.vault_bump = *ctx.bumps.get("yield_vault").unwrap();
+        Ok(())
+    }
+
+    pub fn admin_set_yield_next_pool(
+        ctx: Context<AdminSetYieldNextPool>,
+        next_pool_xnt: u64,
+    ) -> Result<()> {
+        let cfg = &mut ctx.accounts.yield_config;
+        require_keys_eq!(cfg.admin, ctx.accounts.admin.key(), ErrorCode::Unauthorized);
+        if next_pool_xnt > cfg.next_pool_xnt {
+            let delta = next_pool_xnt
+                .checked_sub(cfg.next_pool_xnt)
+                .ok_or(ErrorCode::MathOverflow)?;
+            if delta > 0 {
+                system_program::transfer(
+                    CpiContext::new(
+                        ctx.accounts.system_program.to_account_info(),
+                        SystemTransfer {
+                            from: ctx.accounts.admin.to_account_info(),
+                            to: ctx.accounts.yield_vault.to_account_info(),
+                        },
+                    ),
+                    delta,
+                )?;
+            }
+        }
+        cfg.next_pool_xnt = next_pool_xnt;
+        Ok(())
+    }
+
+    pub fn roll_yield_epoch(ctx: Context<RollYieldEpoch>, total_weight: u64) -> Result<()> {
+        let cfg = &mut ctx.accounts.yield_config;
+        require_keys_eq!(cfg.admin, ctx.accounts.admin.key(), ErrorCode::Unauthorized);
+        let now = Clock::get()?.unix_timestamp;
+        require!(now >= cfg.epoch_end_ts, ErrorCode::YieldEpochNotEnded);
+        cfg.current_pool_xnt = cfg.next_pool_xnt;
+        cfg.next_pool_xnt = 0;
+        cfg.total_weight = total_weight;
+        cfg.epoch_id = cfg.epoch_id.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
+        cfg.epoch_end_ts = next_yield_epoch_end(now)?;
+        let available = vault_available_lamports(&ctx.accounts.yield_vault)?;
+        require!(
+            available >= cfg.current_pool_xnt,
+            ErrorCode::InsufficientVaultBalance
+        );
+        Ok(())
+    }
+
+    pub fn claim_yield(ctx: Context<ClaimYield>) -> Result<()> {
+        let cfg = &ctx.accounts.yield_config;
+        let now = Clock::get()?.unix_timestamp;
+        require!(
+            now >= cfg.epoch_end_ts.saturating_sub(YIELD_EPOCH_SECONDS),
+            ErrorCode::YieldEpochNotStarted
+        );
+        require!(cfg.current_pool_xnt > 0, ErrorCode::YieldPoolEmpty);
+        require!(cfg.total_weight > 0, ErrorCode::YieldPoolEmpty);
+        let profile = load_user_profile_any(&ctx.accounts.user_profile.to_account_info())?;
+        require_keys_eq!(profile.owner, ctx.accounts.owner.key(), ErrorCode::Unauthorized);
+        let weight = yield_level_weight(profile.level);
+        require!(weight > 0, ErrorCode::YieldNotEligible);
+        let yield_user = &mut ctx.accounts.yield_user;
+        if yield_user.owner == Pubkey::default() {
+            yield_user.owner = ctx.accounts.owner.key();
+            yield_user.last_claimed_epoch = 0;
+            yield_user.bump = *ctx.bumps.get("yield_user").unwrap();
+        } else {
+            require_keys_eq!(
+                yield_user.owner,
+                ctx.accounts.owner.key(),
+                ErrorCode::Unauthorized
+            );
+        }
+        require!(
+            yield_user.last_claimed_epoch < cfg.epoch_id,
+            ErrorCode::YieldAlreadyClaimed
+        );
+        let reward = (cfg.current_pool_xnt as u128)
+            .checked_mul(weight as u128)
+            .ok_or(ErrorCode::MathOverflow)?
+            .checked_div(cfg.total_weight as u128)
+            .ok_or(ErrorCode::MathOverflow)?;
+        require!(reward > 0, ErrorCode::NothingToClaim);
+        let reward_u64 = u64::try_from(reward).map_err(|_| ErrorCode::MathOverflow)?;
+        let available = vault_available_lamports(&ctx.accounts.yield_vault)?;
+        require!(available >= reward_u64, ErrorCode::InsufficientVaultBalance);
+        transfer_lamports(
+            &ctx.accounts.yield_vault.to_account_info(),
+            &ctx.accounts.owner.to_account_info(),
+            reward_u64,
+        )?;
+        yield_user.last_claimed_epoch = cfg.epoch_id;
         Ok(())
     }
 
@@ -1588,6 +1701,106 @@ pub struct AdminUpdateRigBuffConfig<'info> {
 }
 
 #[derive(Accounts)]
+pub struct InitYieldConfig<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    #[account(
+        seeds = [CONFIG_SEED],
+        bump = config.bumps.config
+    )]
+    pub config: Box<Account<'info, Config>>,
+    #[account(
+        init,
+        payer = payer,
+        space = 8 + YieldConfig::INIT_SPACE,
+        seeds = [YIELD_CONFIG_SEED],
+        bump
+    )]
+    pub yield_config: Box<Account<'info, YieldConfig>>,
+    #[account(
+        init,
+        payer = payer,
+        space = 8 + NativeVault::INIT_SPACE,
+        seeds = [YIELD_VAULT_SEED],
+        bump
+    )]
+    pub yield_vault: Box<Account<'info, NativeVault>>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct AdminSetYieldNextPool<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [YIELD_CONFIG_SEED],
+        bump = yield_config.bump
+    )]
+    pub yield_config: Box<Account<'info, YieldConfig>>,
+    #[account(
+        mut,
+        seeds = [YIELD_VAULT_SEED],
+        bump = yield_config.vault_bump
+    )]
+    pub yield_vault: Box<Account<'info, NativeVault>>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct RollYieldEpoch<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [YIELD_CONFIG_SEED],
+        bump = yield_config.bump
+    )]
+    pub yield_config: Box<Account<'info, YieldConfig>>,
+    #[account(
+        mut,
+        seeds = [YIELD_VAULT_SEED],
+        bump = yield_config.vault_bump
+    )]
+    pub yield_vault: Box<Account<'info, NativeVault>>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ClaimYield<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    #[account(
+        seeds = [YIELD_CONFIG_SEED],
+        bump = yield_config.bump
+    )]
+    pub yield_config: Box<Account<'info, YieldConfig>>,
+    #[account(
+        mut,
+        seeds = [YIELD_VAULT_SEED],
+        bump = yield_config.vault_bump
+    )]
+    pub yield_vault: Box<Account<'info, NativeVault>>,
+    #[account(
+        init_if_needed,
+        payer = owner,
+        space = 8 + YieldUser::INIT_SPACE,
+        seeds = [YIELD_USER_SEED, owner.key().as_ref()],
+        bump
+    )]
+    pub yield_user: Box<Account<'info, YieldUser>>,
+    #[account(
+        seeds = [PROFILE_SEED, owner.key().as_ref()],
+        bump
+    )]
+    /// CHECK: PDA derived from PROFILE_SEED; validated in instruction handlers.
+    pub user_profile: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 #[instruction(contract_type: u8, position_index: u64)]
 pub struct BuyContract<'info> {
     #[account(mut)]
@@ -2277,6 +2490,27 @@ pub struct RigBuffConfig {
 
 #[account]
 #[derive(InitSpace)]
+pub struct YieldConfig {
+    pub admin: Pubkey,
+    pub current_pool_xnt: u64,
+    pub next_pool_xnt: u64,
+    pub epoch_id: u64,
+    pub epoch_end_ts: i64,
+    pub total_weight: u64,
+    pub bump: u8,
+    pub vault_bump: u8,
+}
+
+#[account]
+#[derive(InitSpace)]
+pub struct YieldUser {
+    pub owner: Pubkey,
+    pub last_claimed_epoch: u64,
+    pub bump: u8,
+}
+
+#[account]
+#[derive(InitSpace)]
 pub struct HpScaleConfig {
     pub enabled: bool,
     pub bump: u8,
@@ -2419,6 +2653,36 @@ fn level_bonus_bps(level: u8) -> u16 {
         5 => 780,
         _ => LEVEL_BONUS_CAP_BPS,
     }
+}
+
+fn yield_level_weight(level: u8) -> u64 {
+    match level {
+        2 => 67,
+        3 => 134,
+        4 => 300,
+        5 => 670,
+        6 => 1340,
+        _ => 0,
+    }
+}
+
+fn next_yield_epoch_end(now: i64) -> Result<i64> {
+    let seconds_per_day = 86_400i64;
+    let days_since_epoch = now.div_euclid(seconds_per_day);
+    let seconds_in_day = now.rem_euclid(seconds_per_day);
+    let weekday = (days_since_epoch + 4).rem_euclid(7); // 0 = Sunday
+    let mut days_until = (7 - weekday) % 7;
+    if days_until == 0 && seconds_in_day >= YIELD_EPOCH_TARGET_SECONDS {
+        days_until = 7;
+    }
+    let target_day = days_since_epoch
+        .checked_add(days_until)
+        .ok_or(ErrorCode::MathOverflow)?;
+    target_day
+        .checked_mul(seconds_per_day)
+        .ok_or(ErrorCode::MathOverflow)?
+        .checked_add(YIELD_EPOCH_TARGET_SECONDS)
+        .ok_or(ErrorCode::MathOverflow.into())
 }
 
 fn level_threshold(level: u8) -> u64 {
@@ -3549,4 +3813,14 @@ pub enum ErrorCode {
     ProfileSyncRequired,
     #[msg("Invalid sync positions")]
     InvalidSyncPositions,
+    #[msg("Yield epoch has not ended")]
+    YieldEpochNotEnded,
+    #[msg("Yield epoch has not started")]
+    YieldEpochNotStarted,
+    #[msg("Yield already claimed for this epoch")]
+    YieldAlreadyClaimed,
+    #[msg("Not eligible for yield")]
+    YieldNotEligible,
+    #[msg("Yield pool is empty")]
+    YieldPoolEmpty,
 }

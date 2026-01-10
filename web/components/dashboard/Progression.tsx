@@ -95,21 +95,25 @@ export function Progression() {
               <div className="text-sm font-semibold text-white">
                 MIND Proof-of-Burn Yield Program
               </div>
+              <div className="mt-1 text-xs uppercase tracking-[0.2em] text-zinc-500">
+                Weekly Revenue Share for LVL Holders
+              </div>
               <div className="mt-2 text-sm text-zinc-300">
-                Weekly revenue share for LVL holders. This is an on-chain yield program that rewards
-                users who burn MIND to upgrade their LVL and support token deflation.
+                This is not a lottery. This is an on-chain revenue share system based on real
+                economic cost. Users who burn MIND to upgrade LVL receive weekly XNT yield
+                proportional to their weight.
               </div>
               <div className="mt-3 space-y-2 text-xs text-zinc-400">
                 <div>
-                  Your LVL determines a fixed weight. The more you burn, the larger your share of
-                  the weekly XNT pool.
+                  Weight represents the real economic cost of entry. The more you burn, the larger
+                  your share of the pool.
                 </div>
                 <div>
                   Formula: Your reward = (Your weight / Total system weight) × Weekly Pool.
                 </div>
                 <div>
-                  Weekly snapshots define payouts. Rewards are claimed manually and can accumulate.
-                  Pool size depends on protocol revenue and is not guaranteed.
+                  Weekly snapshots define payouts. Pool size depends on protocol revenue and is
+                  not guaranteed.
                 </div>
               </div>
             </Card>

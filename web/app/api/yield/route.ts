@@ -9,14 +9,15 @@ import {
   USER_PROFILE_LEN_V4,
   decodeUserMiningProfileAccount,
 } from "@/lib/decoders";
-import { getProgramId, getRpcUrl } from "@/lib/solana";
+import { fetchYieldConfig, getProgramId, getRpcUrl } from "@/lib/solana";
 import {
   computeTotalWeight,
   LEVELS,
   type CountsByLevel,
   type YieldSummary,
 } from "@/lib/yieldMath";
-import { getYieldPoolConfig } from "@/lib/yieldPoolStore";
+
+const XNT_DECIMALS = 9;
 
 const CACHE_TTL_MS = 60_000;
 let cached: { at: number; value: YieldSummary } | null = null;
@@ -62,9 +63,17 @@ async function loadYieldSummary(): Promise<YieldSummary> {
   }
 
   const totalWeight = computeTotalWeight(counts);
-  const poolConfig = getYieldPoolConfig();
+  let poolXnt = 0;
+  try {
+    const yieldConfig = await fetchYieldConfig(connection);
+    const poolBase =
+      yieldConfig.currentPoolXnt > 0n ? yieldConfig.currentPoolXnt : yieldConfig.nextPoolXnt;
+    poolXnt = Number(poolBase) / 10 ** XNT_DECIMALS;
+  } catch {
+    poolXnt = 0;
+  }
   return {
-    poolXnt: poolConfig.currentPoolXnt,
+    poolXnt,
     totalWeight,
     countsByLevel: counts,
     updatedAt: Date.now(),
@@ -73,12 +82,7 @@ async function loadYieldSummary(): Promise<YieldSummary> {
 
 export async function GET() {
   const now = Date.now();
-  const poolConfig = getYieldPoolConfig();
-  if (
-    cached &&
-    now - cached.at < CACHE_TTL_MS &&
-    cached.value.poolXnt === poolConfig.currentPoolXnt
-  ) {
+  if (cached && now - cached.at < CACHE_TTL_MS) {
     return NextResponse.json(cached.value, {
       headers: { "Cache-Control": "public, max-age=30, stale-while-revalidate=30" },
     });

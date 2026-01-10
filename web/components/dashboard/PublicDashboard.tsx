@@ -30,6 +30,9 @@ import {
   deriveUserProfilePda,
   deriveUserStakePda,
   deriveVaultPda,
+  deriveYieldConfigPda,
+  deriveYieldUserPda,
+  deriveYieldVaultPda,
   fetchClockUnixTs,
   fetchConfig,
   fetchLevelConfig,
@@ -51,7 +54,7 @@ import { formatDurationSeconds, formatTokenAmount, parseUiAmountToBase, shortPk 
 import { formatError } from "@/lib/formatError";
 import { sendTelemetry } from "@/lib/telemetryClient";
 import { LEVELING_ENABLED, LEVELING_DISABLED_MESSAGE } from "@/lib/leveling";
-import { computeEstWeeklyXnt, getWeeklyPoolXnt } from "@/lib/yieldMath";
+import { computeEstWeeklyXnt } from "@/lib/yieldMath";
 import { useYieldSummary } from "@/lib/useYieldSummary";
 import {
   RIPPER_POOL_ADDRESS,
@@ -1081,7 +1084,7 @@ export function PublicDashboard() {
   );
   const nextLevelXp = LEVELING_ENABLED && userLevel < LEVEL_CAP ? LEVEL_THRESHOLDS[userLevel] : null;
   const levelBonusPct = (levelBonusBps / 100).toFixed(1);
-  const weeklyPoolXnt = yieldSummary?.poolXnt ?? getWeeklyPoolXnt();
+  const weeklyPoolXnt = yieldSummary?.poolXnt ?? 0;
   const yieldTotalWeight = yieldSummary?.totalWeight ?? 0;
   const personalCountAtLevel =
     yieldSummary?.countsByLevel?.[userLevel as 2 | 3 | 4 | 5 | 6];
@@ -1096,6 +1099,8 @@ export function PublicDashboard() {
         personalYieldEst != null ? `${personalYieldEst.toFixed(2)} XNT` : "—"
       }`
     : "Connect wallet to see your estimated weekly XNT";
+  const canClaimYield =
+    Boolean(walletPublicKey) && userLevel >= 2 && weeklyPoolXnt > 0 && yieldTotalWeight > 0;
   const levelBonusBpsBig = BigInt(levelBonusBps);
   const xpEstimate = useMemo(() => {
     if (!LEVELING_ENABLED) {
@@ -1730,6 +1735,8 @@ export function PublicDashboard() {
         return "unstake_mind";
       case "Claim XNT":
         return "claim_xnt";
+      case "Claim LVL XNT":
+        return "claim_yield";
       case "Claim + stake rXNT":
         return "claim_xnt_rxnt";
       case "Level up":
@@ -2073,6 +2080,25 @@ export function PublicDashboard() {
           userProfile: deriveUserProfilePda(publicKey),
           userStake: deriveUserStakePda(publicKey),
           stakingRewardVault: config.stakingRewardVault,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+      return sig;
+    });
+  };
+
+  const onClaimYield = async () => {
+    if (!anchorWallet || !publicKey) return;
+    const program = getProgram(connection, anchorWallet);
+    await withTx("Claim LVL XNT", async () => {
+      const sig = await program.methods
+        .claimYield()
+        .accounts({
+          owner: publicKey,
+          yieldConfig: deriveYieldConfigPda(),
+          yieldVault: deriveYieldVaultPda(),
+          yieldUser: deriveYieldUserPda(publicKey),
+          userProfile: deriveUserProfilePda(publicKey),
           systemProgram: SystemProgram.programId,
         })
         .rpc();
@@ -3337,6 +3363,9 @@ export function PublicDashboard() {
               rateLine={xpRateLine}
               bonusLine={bonusLine}
               yieldLine={personalYieldLine}
+              yieldActionLabel={walletPublicKey ? "Claim XNT" : null}
+              yieldActionDisabled={!canClaimYield || busy != null}
+              onYieldAction={canClaimYield ? onClaimYield : undefined}
               yieldLinkHref="/progression#level-overview"
               description={xpEstimateNote ? `${progressionDescription} ${xpEstimateNote}` : progressionDescription}
               progressLabel={levelProgressLabel}

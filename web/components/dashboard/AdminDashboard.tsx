@@ -18,8 +18,11 @@ import {
   deriveStakingRewardVaultPda,
   deriveTreasuryVaultPda,
   deriveUserProfilePda,
+  deriveYieldConfigPda,
+  deriveYieldVaultPda,
   fetchClockUnixTs,
   fetchConfig,
+  fetchYieldConfig,
   getProgramId,
 } from "@/lib/solana";
 import { formatTokenAmount, parseUiAmountToBase, shortPk } from "@/lib/format";
@@ -152,11 +155,11 @@ export function AdminDashboard() {
   const [rewardTopUpUi, setRewardTopUpUi] = useState<string>("");
   const [treasuryWithdrawUi, setTreasuryWithdrawUi] = useState<string>("3.8");
   const [stakingWithdrawUi, setStakingWithdrawUi] = useState<string>("1");
-  const [yieldPoolCurrentUi, setYieldPoolCurrentUi] = useState<string>("");
+  const [yieldConfig, setYieldConfig] = useState<Awaited<ReturnType<typeof fetchYieldConfig>> | null>(
+    null
+  );
+  const [yieldConfigError, setYieldConfigError] = useState<string | null>(null);
   const [yieldPoolNextUi, setYieldPoolNextUi] = useState<string>("");
-  const [yieldPoolUpdatedAt, setYieldPoolUpdatedAt] = useState<number | null>(null);
-  const [yieldPoolSource, setYieldPoolSource] = useState<"env" | "admin" | null>(null);
-  const [yieldPoolBusy, setYieldPoolBusy] = useState(false);
   const [yieldPoolError, setYieldPoolError] = useState<string | null>(null);
 
   const [busy, setBusy] = useState<string | null>(null);
@@ -427,67 +430,103 @@ export function AdminDashboard() {
     }
   }, [connection]);
 
-  const loadYieldPool = useCallback(async () => {
-    setYieldPoolError(null);
+  const loadYieldConfig = useCallback(async () => {
+    setYieldConfigError(null);
     try {
-      const res = await fetch("/api/admin/yield-pool", { cache: "no-store" });
-      if (!res.ok) {
-        throw new Error("fetch failed");
-      }
-      const json = (await res.json()) as {
-        currentPoolXnt: number;
-        nextPoolXnt: number;
-        updatedAt: number | null;
-        source?: "env" | "admin";
-      };
-      setYieldPoolCurrentUi(
-        Number.isFinite(json.currentPoolXnt) ? json.currentPoolXnt.toString() : ""
-      );
-      setYieldPoolNextUi(Number.isFinite(json.nextPoolXnt) ? json.nextPoolXnt.toString() : "");
-      setYieldPoolUpdatedAt(json.updatedAt ?? null);
-      setYieldPoolSource(json.source ?? null);
+      const cfg = await fetchYieldConfig(connection);
+      setYieldConfig(cfg);
     } catch (err) {
-      setYieldPoolError("Unable to load yield pool settings.");
+      setYieldConfig(null);
+      setYieldConfigError("Yield config is not initialized yet.");
     }
-  }, []);
+  }, [connection]);
 
-  const saveYieldPool = useCallback(async () => {
-    const current = Number(yieldPoolCurrentUi);
-    const next = Number(yieldPoolNextUi);
-    if (!Number.isFinite(current) || current < 0 || !Number.isFinite(next) || next < 0) {
-      setYieldPoolError("Enter valid pool amounts.");
+  const onInitYieldConfig = useCallback(async () => {
+    if (!anchorWallet || !publicKey || !config) return;
+    const program = getProgram(connection, anchorWallet);
+    await withTx("Init yield config", async () => {
+      const sig = await program.methods
+        .initYieldConfig()
+        .accounts({
+          payer: publicKey,
+          admin: publicKey,
+          config: deriveConfigPda(),
+          yieldConfig: deriveYieldConfigPda(),
+          yieldVault: deriveYieldVaultPda(),
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+      return sig;
+    });
+    await loadYieldConfig();
+  }, [anchorWallet, publicKey, config, connection, loadYieldConfig]);
+
+  const onSetYieldNextPool = useCallback(async () => {
+    if (!anchorWallet || !publicKey || !yieldConfig || !mintDecimals) return;
+    let amountBase: bigint;
+    try {
+      amountBase = parseUiAmountToBase(yieldPoolNextUi, mintDecimals.xnt);
+    } catch (err) {
+      setYieldPoolError("Enter a valid XNT amount.");
+      return;
+    }
+    if (amountBase < 0n) {
+      setYieldPoolError("Enter a valid XNT amount.");
       return;
     }
     setYieldPoolError(null);
-    setYieldPoolBusy(true);
+    const program = getProgram(connection, anchorWallet);
+    await withTx("Set yield pool", async () => {
+      const sig = await program.methods
+        .adminSetYieldNextPool(new BN(amountBase.toString()))
+        .accounts({
+          admin: publicKey,
+          yieldConfig: deriveYieldConfigPda(),
+          yieldVault: deriveYieldVaultPda(),
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+      return sig;
+    });
+    await loadYieldConfig();
+  }, [
+    anchorWallet,
+    publicKey,
+    yieldConfig,
+    mintDecimals,
+    yieldPoolNextUi,
+    connection,
+    loadYieldConfig,
+  ]);
+
+  const onRollYieldEpoch = useCallback(async () => {
+    if (!anchorWallet || !publicKey || !yieldConfig) return;
+    setYieldPoolError(null);
+    let totalWeight = 0;
     try {
-      const res = await fetch("/api/admin/yield-pool", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ currentPoolXnt: current, nextPoolXnt: next }),
-      });
-      if (!res.ok) {
-        throw new Error("save failed");
-      }
-      const json = (await res.json()) as {
-        currentPoolXnt: number;
-        nextPoolXnt: number;
-        updatedAt: number | null;
-        source?: "env" | "admin";
-      };
-      setYieldPoolCurrentUi(
-        Number.isFinite(json.currentPoolXnt) ? json.currentPoolXnt.toString() : ""
-      );
-      setYieldPoolNextUi(Number.isFinite(json.nextPoolXnt) ? json.nextPoolXnt.toString() : "");
-      setYieldPoolUpdatedAt(json.updatedAt ?? null);
-      setYieldPoolSource(json.source ?? null);
-      pushToast({ title: "Yield pool saved", description: "Values applied to estimates." });
+      const res = await fetch("/api/yield", { cache: "no-store" });
+      if (!res.ok) throw new Error("fetch failed");
+      const json = (await res.json()) as { totalWeight?: number };
+      totalWeight = Math.max(0, Math.floor(json.totalWeight ?? 0));
     } catch (err) {
-      setYieldPoolError("Unable to save yield pool settings.");
-    } finally {
-      setYieldPoolBusy(false);
+      setYieldPoolError("Unable to load current LVL weights.");
+      return;
     }
-  }, [yieldPoolCurrentUi, yieldPoolNextUi, pushToast]);
+    const program = getProgram(connection, anchorWallet);
+    await withTx("Roll yield epoch", async () => {
+      const sig = await program.methods
+        .rollYieldEpoch(new BN(totalWeight.toString()))
+        .accounts({
+          admin: publicKey,
+          yieldConfig: deriveYieldConfigPda(),
+          yieldVault: deriveYieldVaultPda(),
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+      return sig;
+    });
+    await loadYieldConfig();
+  }, [anchorWallet, publicKey, yieldConfig, connection, loadYieldConfig]);
 
   const isAdmin = useMemo(() => {
     if (!publicKey || !config) return false;
@@ -501,8 +540,17 @@ export function AdminDashboard() {
 
   useEffect(() => {
     if (!isAdmin) return;
-    void loadYieldPool();
-  }, [isAdmin, loadYieldPool]);
+    void loadYieldConfig();
+  }, [isAdmin, loadYieldConfig]);
+
+  useEffect(() => {
+    if (!yieldConfig || !mintDecimals) {
+      setYieldPoolNextUi("");
+      return;
+    }
+    const nextUi = Number(yieldConfig.nextPoolXnt) / 10 ** mintDecimals.xnt;
+    setYieldPoolNextUi(nextUi.toString());
+  }, [yieldConfig, mintDecimals]);
 
 
   if (!isAdmin) {
@@ -524,6 +572,12 @@ export function AdminDashboard() {
         return "admin_update_config";
       case "Roll epoch":
         return "roll_epoch";
+      case "Init yield config":
+        return "admin_init_yield_config";
+      case "Set yield pool":
+        return "admin_set_yield_pool";
+      case "Roll yield epoch":
+        return "admin_roll_yield_epoch";
       case "Set badge":
         return "admin_set_badge";
       case "Add XP":
@@ -1045,28 +1099,73 @@ export function AdminDashboard() {
           <Card className="p-4">
             <div className="text-sm font-semibold">Proof-of-Burn Yield Pool</div>
             <div className="mt-2 text-xs text-zinc-400">
-              Sets the weekly XNT pool used for LVL yield estimates. Current applies now, next is
-              for the upcoming snapshot.
+              Fund the weekly LVL yield pool on-chain. The next epoch starts every Sunday at 20:00 UTC.
             </div>
-            <div className="mt-3 text-xs text-zinc-400">Current pool (XNT)</div>
-            <Input value={yieldPoolCurrentUi} onChange={setYieldPoolCurrentUi} />
-            <div className="mt-3 text-xs text-zinc-400">Next pool (XNT)</div>
+            {yieldConfig ? (
+              <div className="mt-3 text-xs text-zinc-400">
+                <div>
+                  Current pool:{" "}
+                  <span className="text-zinc-200">
+                    {mintDecimals
+                      ? formatTokenAmount(yieldConfig.currentPoolXnt, mintDecimals.xnt, 4)
+                      : "-"}{" "}
+                    XNT
+                  </span>
+                </div>
+                <div className="mt-1">
+                  Next pool:{" "}
+                  <span className="text-zinc-200">
+                    {mintDecimals
+                      ? formatTokenAmount(yieldConfig.nextPoolXnt, mintDecimals.xnt, 4)
+                      : "-"}{" "}
+                    XNT
+                  </span>
+                </div>
+                <div className="mt-1">
+                  Epoch ends:{" "}
+                  <span className="text-zinc-200">
+                    {yieldConfig.epochEndTs ? new Date(yieldConfig.epochEndTs * 1000).toUTCString() : "-"}
+                  </span>
+                </div>
+                <div className="mt-1">
+                  Snapshot total weight:{" "}
+                  <span className="text-zinc-200">{yieldConfig.totalWeight.toString()}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 text-xs text-amber-200">
+                {yieldConfigError ?? "Yield config not initialized."}
+              </div>
+            )}
+            <div className="mt-3 text-xs text-zinc-400">Set next pool (XNT)</div>
             <Input value={yieldPoolNextUi} onChange={setYieldPoolNextUi} />
-            <div className="mt-2 text-[11px] text-zinc-500">
-              {yieldPoolSource === "admin" && yieldPoolUpdatedAt
-                ? `Saved ${new Date(yieldPoolUpdatedAt).toLocaleString()}`
-                : "Using env defaults"}
-            </div>
             {yieldPoolError ? (
               <div className="mt-2 text-xs text-amber-200">{yieldPoolError}</div>
             ) : null}
-            <Button
-              className="mt-4"
-              onClick={() => void saveYieldPool()}
-              disabled={!isAdmin || yieldPoolBusy}
-            >
-              {yieldPoolBusy ? "Saving..." : "Save yield pool"}
-            </Button>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                onClick={() => void onSetYieldNextPool()}
+                disabled={!isAdmin || busy != null || !yieldConfig}
+              >
+                {busy === "Set yield pool" ? "Submitting..." : "Fund next pool"}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => void onRollYieldEpoch()}
+                disabled={!isAdmin || busy != null || !yieldConfig}
+              >
+                {busy === "Roll yield epoch" ? "Submitting..." : "Roll yield epoch"}
+              </Button>
+              {!yieldConfig ? (
+                <Button
+                  variant="secondary"
+                  onClick={() => void onInitYieldConfig()}
+                  disabled={!isAdmin || busy != null}
+                >
+                  {busy === "Init yield config" ? "Submitting..." : "Init yield config"}
+                </Button>
+              ) : null}
+            </div>
           </Card>
 
           <Card className="p-4">

@@ -657,6 +657,140 @@
       ]
     },
     {
+      "name": "initYieldConfig",
+      "accounts": [
+        {
+          "name": "payer",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "admin",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "config",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "yieldConfig",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "yieldVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "adminSetYieldNextPool",
+      "accounts": [
+        {
+          "name": "admin",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "yieldConfig",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "yieldVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "nextPoolXnt",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "rollYieldEpoch",
+      "accounts": [
+        {
+          "name": "admin",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "yieldConfig",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "yieldVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "totalWeight",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "claimYield",
+      "accounts": [
+        {
+          "name": "owner",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "yieldConfig",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "yieldVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "yieldUser",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userProfile",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "adminUpdateConfig",
       "accounts": [
         {
