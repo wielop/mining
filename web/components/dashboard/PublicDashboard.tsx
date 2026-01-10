@@ -51,6 +51,8 @@ import { formatDurationSeconds, formatTokenAmount, parseUiAmountToBase, shortPk 
 import { formatError } from "@/lib/formatError";
 import { sendTelemetry } from "@/lib/telemetryClient";
 import { LEVELING_ENABLED, LEVELING_DISABLED_MESSAGE } from "@/lib/leveling";
+import { computeEstWeeklyXnt, getWeeklyPoolXnt } from "@/lib/yieldMath";
+import { useYieldSummary } from "@/lib/useYieldSummary";
 import {
   RIPPER_POOL_ADDRESS,
   calcPoolTokensForDeposit,
@@ -495,6 +497,7 @@ function isTxTooLargeError(err: unknown) {
 export function PublicDashboard() {
   const { connection } = useConnection();
   const { publicKey: walletPublicKey, signAllTransactions, signTransaction } = useWallet();
+  const { data: yieldSummary } = useYieldSummary();
   const anchorWallet = useAnchorWallet();
   const publicKey = walletPublicKey;
   const canTransact = Boolean(anchorWallet && walletPublicKey);
@@ -1078,6 +1081,14 @@ export function PublicDashboard() {
   );
   const nextLevelXp = LEVELING_ENABLED && userLevel < LEVEL_CAP ? LEVEL_THRESHOLDS[userLevel] : null;
   const levelBonusPct = (levelBonusBps / 100).toFixed(1);
+  const weeklyPoolXnt = yieldSummary?.poolXnt ?? getWeeklyPoolXnt();
+  const yieldTotalWeight = yieldSummary?.totalWeight ?? 0;
+  const personalYieldEst = computeEstWeeklyXnt(userLevel, yieldTotalWeight, weeklyPoolXnt);
+  const personalYieldLine = walletPublicKey
+    ? `Est. weekly XNT (LVL yield): ${
+        personalYieldEst != null ? `${personalYieldEst.toFixed(2)} XNT` : "—"
+      }`
+    : "Connect wallet to see your estimated weekly XNT";
   const levelBonusBpsBig = BigInt(levelBonusBps);
   const xpEstimate = useMemo(() => {
     if (!LEVELING_ENABLED) {
@@ -3318,6 +3329,8 @@ export function PublicDashboard() {
               xpLine={xpLine}
               rateLine={xpRateLine}
               bonusLine={bonusLine}
+              yieldLine={personalYieldLine}
+              yieldLinkHref="/progression#level-overview"
               description={xpEstimateNote ? `${progressionDescription} ${xpEstimateNote}` : progressionDescription}
               progressLabel={levelProgressLabel}
               progressPct={levelProgressPct}
