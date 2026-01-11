@@ -4,7 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import * as anchor from "@coral-xyz/anchor";
 import { BN } from "@coral-xyz/anchor";
 import { useAnchorWallet, useConnection, useWallet } from "@solana/wallet-adapter-react";
-import {\n  createAssociatedTokenAccountInstruction,\n  getAssociatedTokenAddressSync,\n  TOKEN_PROGRAM_ID,\n} from "@solana/spl-token";
+import {
+  createAssociatedTokenAccountInstruction,
+  getAssociatedTokenAddressSync,
+  TOKEN_PROGRAM_ID,
+} from "@solana/spl-token";
 import { Keypair, PublicKey, SystemProgram } from "@solana/web3.js";
 import { TopBar } from "@/components/shared/TopBar";
 import { cn } from "@/components/ui/cn";
@@ -301,7 +305,9 @@ export function X1MindMiner() {
             ),
           ];
 
-      const sig = await program.methods\n+        .claim(new BN(roundId.toString()), selectedCell)\n+        .accounts({\n           owner: publicKey,\n           config: deriveX1MindConfigPda(),\n           round: deriveX1MindRoundPda(roundId),\n           userCommit: deriveX1MindCommitPda(roundId, publicKey, selectedCell),\n           mindVault,\n           mindVaultAuthority: deriveX1MindMindVaultAuthority(),\n           userMindAta,\n-          tokenProgram: (await import(\"@solana/spl-token\")).TOKEN_PROGRAM_ID,\n+          tokenProgram: TOKEN_PROGRAM_ID,\n           systemProgram: SystemProgram.programId,\n-        })\n+        })\n         .preInstructions(preIxs)\n         .rpc();
+      const sig = await program.methods
+        .claim(new BN(roundId.toString()), selectedCell)
+        .accounts({
           owner: publicKey,
           config: deriveX1MindConfigPda(),
           round: deriveX1MindRoundPda(roundId),
@@ -309,7 +315,7 @@ export function X1MindMiner() {
           mindVault,
           mindVaultAuthority: deriveX1MindMindVaultAuthority(),
           userMindAta,
-          tokenProgram: (await import("@solana/spl-token")).TOKEN_PROGRAM_ID,
+          tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
         .preInstructions(preIxs)
