@@ -7,6 +7,7 @@ import { cn } from "@/components/ui/cn";
 import { InfoPopover } from "@/components/shared/InfoPopover";
 import { HowItWorksPopover } from "@/components/shared/HowItWorksPopover";
 import { TierBadge } from "@/components/xp/TierBadge";
+import { deriveX1MindConfigPda, getX1MindMindMint, getX1MindProgramId } from "@/lib/x1mind";
 
 export function TopBar({
   link,
@@ -25,6 +26,18 @@ export function TopBar({
 }) {
   const pathname = usePathname();
   const isProgression = pathname === "/progression";
+  const isMiner = pathname === "/miner";
+  const isDashboard = pathname === "/";
+  const x1mindProgram = isMiner ? getX1MindProgramId().toBase58() : undefined;
+  const x1mindConfig = isMiner ? deriveX1MindConfigPda().toBase58() : undefined;
+  const x1mindMint = isMiner ? getX1MindMindMint().toBase58() : undefined;
+  const navClass = (active: boolean) =>
+    cn(
+      "inline-flex h-9 items-center justify-center rounded-full border px-3 text-[10px] font-semibold uppercase tracking-[0.2em] transition",
+      active
+        ? "border-cyan-300/60 bg-ink/90 text-white"
+        : "border-cyan-400/20 bg-ink/70 text-zinc-300 hover:border-cyan-300/40 hover:bg-ink/90"
+    );
 
   return (
     <header className={cn("sticky top-0 z-40 border-b border-cyan-400/10 bg-ink/80 backdrop-blur-xl", className)}>
@@ -50,17 +63,18 @@ export function TopBar({
           </div>
         </Link>
         <div className="flex flex-wrap items-center gap-3">
-          <InfoPopover />
+          <InfoPopover programId={x1mindProgram} config={x1mindConfig} mint={x1mindMint} />
           <HowItWorksPopover />
+          <Link href="/" aria-current={isDashboard ? "page" : undefined} className={navClass(isDashboard)}>
+            Dashboard
+          </Link>
+          <Link href="/miner" aria-current={isMiner ? "page" : undefined} className={navClass(isMiner)}>
+            Miner
+          </Link>
           <Link
             href="/progression"
             aria-current={isProgression ? "page" : undefined}
-            className={cn(
-              "inline-flex h-9 items-center justify-center rounded-full border px-3 text-[10px] font-semibold uppercase tracking-[0.2em] transition",
-              isProgression
-                ? "border-cyan-300/60 bg-ink/90 text-white"
-                : "border-cyan-400/20 bg-ink/70 text-zinc-300 hover:border-cyan-300/40 hover:bg-ink/90"
-            )}
+            className={navClass(isProgression)}
           >
             {progressionLabel ?? "Progression"}
           </Link>

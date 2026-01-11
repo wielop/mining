@@ -9,7 +9,11 @@ Public app (Vercel-ready) for interacting with the on-chain program:
 
 - `NEXT_PUBLIC_RPC_URL` (default: `https://rpc.testnet.x1.xyz`; set to `https://rpc.mainnet.x1.xyz`/main program for x1factory)
 - `NEXT_PUBLIC_PROGRAM_ID` (default: `uaDkkJGLLEY3kFMhhvrh5MZJ6fmwCmhNf8L7BZQJ9Aw`)
+- `NEXT_PUBLIC_X1MIND_PROGRAM_ID` (default: `7qH6rrAoNEp2oWmVurvqD9onVu1cCJcg7vLR6NigvkLz`)
+- `NEXT_PUBLIC_X1MIND_MIND_MINT` (default: `AJhe17P7jFTUgsTUJYxvTdqpND5RG1cr1SSXxLrG9QUc`)
 - `NEXT_PUBLIC_RPC_PROXY` (optional) – use `/api/rpc` for RPC CORS proxying if needed.
+
+X1Mind config PDA is derived from the program id using seed `config` (default: `6JUBZXSMBRTdCjCD8tQ8CXY1hM5dxggfXuTYG9Zamhu`).
 
 ## Uniterminal data proxy
 

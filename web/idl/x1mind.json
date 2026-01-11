@@ -1,0 +1,724 @@
+{
+  "version": "0.1.0",
+  "name": "x1mind",
+  "instructions": [
+    {
+      "name": "initConfig",
+      "accounts": [
+        {
+          "name": "admin",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "config",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mindMint",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "mindVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mindVaultAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "buybackWallet",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "adminWallet",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "motherlodeVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": "InitConfigParams"
+          }
+        }
+      ]
+    },
+    {
+      "name": "startRound",
+      "accounts": [
+        {
+          "name": "config",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "admin",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "round",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "roundId",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "commitDeposit",
+      "accounts": [
+        {
+          "name": "owner",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "config",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "round",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userCommit",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "referrer",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "roundId",
+          "type": "u64"
+        },
+        {
+          "name": "cell",
+          "type": "u8"
+        },
+        {
+          "name": "commitHash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "referrerKey",
+          "type": "publicKey"
+        }
+      ]
+    },
+    {
+      "name": "reveal",
+      "accounts": [
+        {
+          "name": "owner",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "config",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "round",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userCommit",
+          "isMut": true,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "roundId",
+          "type": "u64"
+        },
+        {
+          "name": "cell",
+          "type": "u8"
+        },
+        {
+          "name": "seed",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "finalizeRound",
+      "accounts": [
+        {
+          "name": "config",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "admin",
+          "isMut": false,
+          "isSigner": true
+        },
+        {
+          "name": "round",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "buybackWallet",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "adminWallet",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "motherlodeVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mindVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "roundId",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "claim",
+      "accounts": [
+        {
+          "name": "owner",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "config",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "round",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userCommit",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mindVault",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mindVaultAuthority",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "userMindAta",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "roundId",
+          "type": "u64"
+        },
+        {
+          "name": "cell",
+          "type": "u8"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Config",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "publicKey"
+          },
+          {
+            "name": "mindMint",
+            "type": "publicKey"
+          },
+          {
+            "name": "mindVault",
+            "type": "publicKey"
+          },
+          {
+            "name": "buybackWallet",
+            "type": "publicKey"
+          },
+          {
+            "name": "adminWallet",
+            "type": "publicKey"
+          },
+          {
+            "name": "motherlodeVault",
+            "type": "publicKey"
+          },
+          {
+            "name": "gridSize",
+            "type": "u8"
+          },
+          {
+            "name": "roundLengthSecs",
+            "type": "u64"
+          },
+          {
+            "name": "commitWindowSecs",
+            "type": "u64"
+          },
+          {
+            "name": "revealWindowSecs",
+            "type": "u64"
+          },
+          {
+            "name": "dailyRateBps",
+            "type": "u16"
+          },
+          {
+            "name": "buybackBps",
+            "type": "u16"
+          },
+          {
+            "name": "motherlodeBps",
+            "type": "u16"
+          },
+          {
+            "name": "adminBps",
+            "type": "u16"
+          },
+          {
+            "name": "referralBps",
+            "type": "u16"
+          },
+          {
+            "name": "currentRoundId",
+            "type": "u64"
+          },
+          {
+            "name": "roundRewardRemainder",
+            "type": "u64"
+          },
+          {
+            "name": "mindVaultAuthorityBump",
+            "type": "u8"
+          },
+          {
+            "name": "motherlodeVaultBump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Round",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "roundId",
+            "type": "u64"
+          },
+          {
+            "name": "startTs",
+            "type": "i64"
+          },
+          {
+            "name": "commitEndTs",
+            "type": "i64"
+          },
+          {
+            "name": "revealEndTs",
+            "type": "i64"
+          },
+          {
+            "name": "totalXnt",
+            "type": "u64"
+          },
+          {
+            "name": "poolXnt",
+            "type": "u64"
+          },
+          {
+            "name": "buybackFee",
+            "type": "u64"
+          },
+          {
+            "name": "adminFee",
+            "type": "u64"
+          },
+          {
+            "name": "referralFee",
+            "type": "u64"
+          },
+          {
+            "name": "motherlodeFee",
+            "type": "u64"
+          },
+          {
+            "name": "motherlodePayoutXnt",
+            "type": "u64"
+          },
+          {
+            "name": "mindReward",
+            "type": "u64"
+          },
+          {
+            "name": "finalized",
+            "type": "bool"
+          },
+          {
+            "name": "winningCell",
+            "type": "u8"
+          },
+          {
+            "name": "motherlodeHit",
+            "type": "bool"
+          },
+          {
+            "name": "commitAccumulator",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "revealAccumulator",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "totalPerCell",
+            "type": {
+              "array": [
+                "u64",
+                36
+              ]
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UserCommit",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "publicKey"
+          },
+          {
+            "name": "roundId",
+            "type": "u64"
+          },
+          {
+            "name": "cell",
+            "type": "u8"
+          },
+          {
+            "name": "deposit",
+            "type": "u64"
+          },
+          {
+            "name": "commitHash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "revealed",
+            "type": "bool"
+          },
+          {
+            "name": "claimed",
+            "type": "bool"
+          },
+          {
+            "name": "referrer",
+            "type": "publicKey"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MotherlodeVault",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    }
+  ],
+  "types": [
+    {
+      "name": "InitConfigParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "gridSize",
+            "type": "u8"
+          },
+          {
+            "name": "roundLengthSecs",
+            "type": "u64"
+          },
+          {
+            "name": "commitWindowSecs",
+            "type": "u64"
+          },
+          {
+            "name": "revealWindowSecs",
+            "type": "u64"
+          },
+          {
+            "name": "dailyRateBps",
+            "type": "u16"
+          },
+          {
+            "name": "buybackBps",
+            "type": "u16"
+          },
+          {
+            "name": "motherlodeBps",
+            "type": "u16"
+          },
+          {
+            "name": "adminBps",
+            "type": "u16"
+          },
+          {
+            "name": "referralBps",
+            "type": "u16"
+          }
+        ]
+      }
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "InvalidGridSize",
+      "msg": "Invalid grid size"
+    },
+    {
+      "code": 6001,
+      "name": "InvalidRoundTiming",
+      "msg": "Invalid round timing"
+    },
+    {
+      "code": 6002,
+      "name": "InvalidFees",
+      "msg": "Invalid fee configuration"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidRoundId",
+      "msg": "Invalid round id"
+    },
+    {
+      "code": 6004,
+      "name": "InvalidCell",
+      "msg": "Invalid cell index"
+    },
+    {
+      "code": 6005,
+      "name": "CommitWindowClosed",
+      "msg": "Commit window closed"
+    },
+    {
+      "code": 6006,
+      "name": "RevealTooEarly",
+      "msg": "Reveal window not started"
+    },
+    {
+      "code": 6007,
+      "name": "RevealWindowClosed",
+      "msg": "Reveal window closed"
+    },
+    {
+      "code": 6008,
+      "name": "RoundNotFinalized",
+      "msg": "Round not finalized"
+    },
+    {
+      "code": 6009,
+      "name": "RoundFinalized",
+      "msg": "Round already finalized"
+    },
+    {
+      "code": 6010,
+      "name": "AlreadyCommitted",
+      "msg": "Already committed"
+    },
+    {
+      "code": 6011,
+      "name": "AlreadyRevealed",
+      "msg": "Already revealed"
+    },
+    {
+      "code": 6012,
+      "name": "AlreadyClaimed",
+      "msg": "Already claimed"
+    },
+    {
+      "code": 6013,
+      "name": "CommitMismatch",
+      "msg": "Commit hash mismatch"
+    },
+    {
+      "code": 6014,
+      "name": "NotRevealed",
+      "msg": "Not revealed"
+    },
+    {
+      "code": 6015,
+      "name": "NotWinner",
+      "msg": "Not a winner"
+    },
+    {
+      "code": 6016,
+      "name": "NothingToClaim",
+      "msg": "Nothing to claim"
+    },
+    {
+      "code": 6017,
+      "name": "InvalidAmount",
+      "msg": "Invalid amount"
+    },
+    {
+      "code": 6018,
+      "name": "MathOverflow",
+      "msg": "Math overflow"
+    },
+    {
+      "code": 6019,
+      "name": "InvalidMint",
+      "msg": "Invalid mint"
+    },
+    {
+      "code": 6020,
+      "name": "InvalidVaultAuthority",
+      "msg": "Invalid vault authority"
+    },
+    {
+      "code": 6021,
+      "name": "RevealWindowOpen",
+      "msg": "Reveal window still open"
+    }
+  ],
+  "metadata": {
+    "address": "7qH6rrAoNEp2oWmVurvqD9onVu1cCJcg7vLR6NigvkLz"
+  }
+}
