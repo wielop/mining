@@ -87,10 +87,10 @@ const withAccountTypes = (idlValue: anchor.Idl): anchor.Idl => {
   const types = [...(idlValue.types ?? [])];
   const typeNames = new Set(types.map((typeDef) => typeDef.name));
   for (const account of idlValue.accounts ?? []) {
-    const accountDef = account as anchor.IdlAccount & { type?: anchor.IdlTypeDefTy };
+    const accountDef = account as { name: string; type?: unknown };
     if (!accountDef.type) continue;
     if (!typeNames.has(accountDef.name)) {
-      types.push({ name: accountDef.name, type: accountDef.type });
+      types.push({ name: accountDef.name, type: accountDef.type as any });
       typeNames.add(accountDef.name);
     }
   }
