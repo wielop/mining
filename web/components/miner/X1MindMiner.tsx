@@ -104,11 +104,20 @@ export function X1MindMiner() {
   const [lastSig, setLastSig] = useState<string | null>(null);
   const [commitRefreshKey, setCommitRefreshKey] = useState(0);
 
+  const readOnlyWallet = useMemo(() => {
+    const keypair = Keypair.generate();
+    return {
+      publicKey: keypair.publicKey,
+      signTransaction: async (tx: any) => tx,
+      signAllTransactions: async (txs: any[]) => txs,
+    };
+  }, []);
+
   const program = useMemo(() => {
     if (!connection) return null;
-    const wallet = anchorWallet ?? new anchor.Wallet(Keypair.generate());
+    const wallet = anchorWallet ?? readOnlyWallet;
     return getX1MindProgram(connection, wallet as any);
-  }, [connection, anchorWallet]);
+  }, [connection, anchorWallet, readOnlyWallet]);
 
   const gridSize = Number(config?.gridSize ?? GRID_FALLBACK);
 
